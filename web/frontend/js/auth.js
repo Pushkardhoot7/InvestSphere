@@ -142,7 +142,7 @@ const Auth = {
 
     try {
       const res = await Api.post('/auth/login', { email, password });
-      if (res.status === 'ok' && res.data) {
+      if ((res.success || res.status === 'ok') && res.data) {
         Api.setToken(res.data.token);
         Api.setUser(res.data.user);
         this.updateUserUI(res.data.user);
@@ -194,7 +194,8 @@ const Auth = {
       return;
     }
 
-    if (mobile_number && !/^[6-9]\d{9}$/.test(mobile_number.replace(/[\s\-\(\)\+91]/g, ''))) {
+    const normalizedMobile = mobile_number.replace(/^(\+91|91)/, '').replace(/[\s\-\(\)]/g, '');
+    if (mobile_number && !/^[6-9]\d{9}$/.test(normalizedMobile)) {
       errorBox.textContent = 'Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).';
       errorBox.classList.remove('hidden');
       return;
@@ -243,7 +244,7 @@ const Auth = {
         captcha_answer
       });
 
-      if (res.status === 'ok' && res.data) {
+      if ((res.success || res.status === 'ok') && res.data) {
         Api.setToken(res.data.token);
         Api.setUser(res.data.user);
         this.updateUserUI(res.data.user);
@@ -297,7 +298,7 @@ const Auth = {
 
     try {
       const res = await Api.get('/auth/me');
-      if (res.status === 'ok' && res.data) {
+      if ((res.success || res.status === 'ok') && res.data) {
         Api.setUser(res.data);
         this.updateUserUI(res.data);
         this.showAppView();

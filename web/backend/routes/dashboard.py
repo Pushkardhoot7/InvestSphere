@@ -45,9 +45,9 @@ def get_dashboard():
 
     # Latest market prices to refine current values
     prices = db.execute(
-        "SELECT instrument_id, price FROM vw_latest_market_prices"
+        "SELECT instrument_id, latest_price FROM vw_latest_market_prices"
     ).fetchall()
-    price_map = {r["instrument_id"]: r["price"] for r in prices}
+    price_map = {r["instrument_id"]: r["latest_price"] for r in prices}
 
     navs = db.execute(
         "SELECT instrument_id, latest_nav FROM vw_latest_mutual_fund_nav"
