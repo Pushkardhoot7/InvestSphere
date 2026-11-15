@@ -61,7 +61,13 @@ const Api = {
       if (response.status === 401 && !isAuthRoute) {
         // Token expired or invalid for a protected route
         this.clearSession();
-        window.dispatchEvent(new CustomEvent('auth:expired'));
+        // Only show the session-expired toast if the app section is actually visible
+        // (i.e., user was logged in and their session just expired mid-use).
+        // Don't show it during the initial checkSession() call on the sign-in page.
+        const appVisible = !document.getElementById('app-section')?.classList.contains('hidden');
+        if (appVisible) {
+          window.dispatchEvent(new CustomEvent('auth:expired'));
+        }
         throw new Error('Session expired. Please sign in again.');
       }
 

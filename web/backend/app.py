@@ -221,17 +221,29 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
-    # Ensure base user accounts always exist across ephemeral container redeploys
+    # Ensure base user accounts always exist across ephemeral container redeploys.
+    # Password for all default accounts: Pushkar@2026  (user can reset via the Reset Password page)
+    # We use INSERT OR IGNORE so user-changed passwords are never overwritten on redeploy.
+    # If the stored hash is the old broken demo hash, we repair it to the known default.
+    _BROKEN_DEMO_HASH = "$pbkdf2-sha256$i=100000,l=32$e696d7adab4b8f4c2f45a88be6fba6e33e56588bc182709000b14e68ebe00c27$f7652bcc0c48eeec9c98199f617609b670a22530d480b160e4c8fc2bc0b0906a"
+    _DEFAULT_PW_HASH  = "$pbkdf2-sha256$i=100000,l=32$9837833e323c558719774b8866c964951a19603d390d2d5324be7dade625bdba$67b859ad5c21d0b3626c5362131e6592330578dbb36359494fb66168b6e4df01"
     default_users = [
-        ("Pushkar Dhoot", "pushkardhoot2121@gmail.com", "$pbkdf2-sha256$i=100000,l=32$e696d7adab4b8f4c2f45a88be6fba6e33e56588bc182709000b14e68ebe00c27$f7652bcc0c48eeec9c98199f617609b670a22530d480b160e4c8fc2bc0b0906a", "India", "Maharashtra"),
-        ("Aditya Sharma", "aditya@investsphere.local", "$pbkdf2-sha256$i=100000,l=32$e696d7adab4b8f4c2f45a88be6fba6e33e56588bc182709000b14e68ebe00c27$f7652bcc0c48eeec9c98199f617609b670a22530d480b160e4c8fc2bc0b0906a", "India", "Maharashtra"),
-        ("Elena Rostova", "elena@investsphere.local", "$pbkdf2-sha256$i=100000,l=32$e696d7adab4b8f4c2f45a88be6fba6e33e56588bc182709000b14e68ebe00c27$f7652bcc0c48eeec9c98199f617609b670a22530d480b160e4c8fc2bc0b0906a", "India", "Maharashtra"),
+        ("Pushkar Dhoot",  "pushkardhoot2121@gmail.com", _DEFAULT_PW_HASH, "India", "Maharashtra"),
+        ("Aditya Sharma",  "aditya@investsphere.local",  _DEFAULT_PW_HASH, "India", "Maharashtra"),
+        ("Elena Rostova",  "elena@investsphere.local",   _DEFAULT_PW_HASH, "India", "Maharashtra"),
     ]
     for full_name, email, pw_hash, country, state in default_users:
+        # Create account if it doesn't exist yet
         conn.execute(
             """INSERT OR IGNORE INTO users (full_name, email, password_hash, account_status, country, state)
                VALUES (?, ?, ?, 'ACTIVE', ?, ?)""",
             (full_name, email, pw_hash, country, state)
+        )
+        # If it already existed with the broken demo hash, repair it to the known default
+        conn.execute(
+            """UPDATE users SET password_hash = ?, account_status = 'ACTIVE'
+               WHERE email = ? AND password_hash = ?""",
+            (pw_hash, email, _BROKEN_DEMO_HASH)
         )
 
     conn.commit()

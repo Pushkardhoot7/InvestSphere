@@ -56,7 +56,7 @@ const Modals = {
     }, 150);
   },
 
-  open(modalId) {
+  open(modalId, selectedInvId = null) {
     const el = document.getElementById(modalId);
     if (!el) return;
     el.classList.remove('hidden');
@@ -71,7 +71,7 @@ const Modals = {
       const dateInput = document.getElementById('tx-date');
       if (dateInput && !dateInput.value) dateInput.value = today;
       document.getElementById('add-tx-error')?.classList.add('hidden');
-      this.populateInvestmentDropdown();
+      this.populateInvestmentDropdown(selectedInvId);
     }
   },
 
@@ -290,7 +290,7 @@ const Modals = {
     txTypeSelect?.addEventListener('change', calcTxNet);
   },
 
-  async populateInvestmentDropdown() {
+  async populateInvestmentDropdown(selectedId = null) {
     const sel = document.getElementById('tx-investment');
     if (!sel) return;
     sel.innerHTML = '<option value="">Loading instruments…</option>';
@@ -305,6 +305,10 @@ const Modals = {
       sel.innerHTML = list
         .map((inv) => `<option value="${inv.investment_id}">${inv.name} (${inv.symbol || inv.type_code})</option>`)
         .join('');
+      // Set the pre-selected investment after the list is populated
+      if (selectedId) {
+        sel.value = String(selectedId);
+      }
     } catch (err) {
       sel.innerHTML = '<option value="">Error loading investments</option>';
     }
@@ -373,6 +377,10 @@ const Modals = {
       payload.quantity = quantity;
       payload.unit_price = unit_price;
       payload.total_amount = total_amount;
+      // For Bonds, also send face_value so the backend validator passes
+      if (category === 'BOND') {
+        payload.face_value = unit_price;
+      }
     }
 
     btn.disabled = true;

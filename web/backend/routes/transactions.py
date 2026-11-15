@@ -100,24 +100,28 @@ def add_transaction():
     tx_date = (data.get("transaction_date") or data.get("tx_date") or "").strip()
     qty = float(data.get("quantity") or 0)
 
-    if "unit_price" in data:
+    if "unit_price" in data and data["unit_price"] is not None:
         unit_price = int(round(float(data["unit_price"]) * 100))
+    elif "unit_price_cents" in data and data["unit_price_cents"] is not None:
+        unit_price = int(data["unit_price_cents"])
+    elif qty > 0 and "gross_amount" in data and float(data["gross_amount"]) > 0:
+        unit_price = int(round(float(data["gross_amount"]) * 100 / qty))
     else:
-        unit_price = int(data.get("unit_price_cents") or 0)
+        unit_price = 0
 
-    if "gross_amount" in data:
+    if "gross_amount" in data and data["gross_amount"] is not None:
         gross = int(round(float(data["gross_amount"]) * 100))
-    elif "gross_amount_cents" in data:
+    elif "gross_amount_cents" in data and data["gross_amount_cents"] is not None:
         gross = int(data["gross_amount_cents"])
     else:
         gross = int(round(qty * unit_price))
 
-    fees = int(round(float(data["fees"]) * 100)) if "fees" in data else int(data.get("fees_cents") or 0)
-    taxes = int(round(float(data["taxes"]) * 100)) if "taxes" in data else int(data.get("taxes_cents") or 0)
+    fees = int(round(float(data["fees"]) * 100)) if ("fees" in data and data["fees"] is not None) else int(data.get("fees_cents") or 0)
+    taxes = int(round(float(data["taxes"]) * 100)) if ("taxes" in data and data["taxes"] is not None) else int(data.get("taxes_cents") or 0)
 
-    if "net_amount" in data:
+    if "net_amount" in data and data["net_amount"] is not None:
         net = int(round(float(data["net_amount"]) * 100))
-    elif "net_amount_cents" in data:
+    elif "net_amount_cents" in data and data["net_amount_cents"] is not None:
         net = int(data["net_amount_cents"])
     else:
         if tx_type in ("BUY", "DEPOSIT"):
@@ -128,12 +132,14 @@ def add_transaction():
     notes = (data.get("notes") or "").strip()
 
     try:
+        # If quantity <= 0 (e.g. cash deposit, dividend, interest payout), use NULL to satisfy DB CHECK constraint
+        db_qty = qty if qty > 0 else None
         cur = db.execute(
             """INSERT INTO transactions
                (user_id, investment_id, transaction_type, transaction_date,
                 quantity, unit_price, gross_amount, fees, taxes, net_amount, notes)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (g.user_id, inv_id, tx_type, tx_date, qty, unit_price, gross, fees, taxes, net, notes)
+            (g.user_id, inv_id, tx_type, tx_date, db_qty, unit_price, gross, fees, taxes, net, notes)
         )
         db.commit()
         tx_id = cur.lastrowid

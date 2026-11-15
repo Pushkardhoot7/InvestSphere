@@ -398,11 +398,7 @@ const Pages = {
   },
 
   async recordTxForInv(invId) {
-    Modals.open('modal-add-transaction');
-    setTimeout(() => {
-      const sel = document.getElementById('tx-investment');
-      if (sel) sel.value = String(invId);
-    }, 200);
+    Modals.open('modal-add-transaction', invId);
   },
 
   async deleteInvestment(invId, name) {

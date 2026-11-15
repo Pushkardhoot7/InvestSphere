@@ -218,18 +218,29 @@ def add_investment():
                      data.get("plan_type", "GROWTH"), data.get("expense_ratio", 0.0))
                 )
 
-        # 2. Create investment holding
-        cur = db.execute(
-            "INSERT INTO investments (user_id, instrument_id, portfolio_tag, notes, status, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?)",
-            (g.user_id, inst_id, data.get("portfolio_tag", "DEFAULT"), data.get("notes", ""), now, now)
-        )
-        inv_id = cur.lastrowid
+        # 2. Resolve or create investment holding
+        p_tag = (data.get("portfolio_tag") or "DEFAULT").strip() or "DEFAULT"
+        existing_inv = db.execute(
+            "SELECT investment_id, status FROM investments WHERE user_id = ? AND instrument_id = ? AND portfolio_tag = ?",
+            (g.user_id, inst_id, p_tag)
+        ).fetchone()
+
+        if existing_inv:
+            inv_id = existing_inv["investment_id"]
+            if existing_inv["status"] != "ACTIVE":
+                db.execute("UPDATE investments SET status = 'ACTIVE', updated_at = ? WHERE investment_id = ?", (now, inv_id))
+        else:
+            cur = db.execute(
+                "INSERT INTO investments (user_id, instrument_id, portfolio_tag, notes, status, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?)",
+                (g.user_id, inst_id, p_tag, data.get("notes", ""), now, now)
+            )
+            inv_id = cur.lastrowid
 
         # 3. Holding specializations
         if cat == "GOLD":
             db.execute(
-                "INSERT INTO gold_holdings (investment_id, gold_form, purity_karat, storage_location) VALUES (?,?,?,?)",
+                "INSERT OR REPLACE INTO gold_holdings (investment_id, gold_form, purity_karat, storage_location) VALUES (?,?,?,?)",
                 (inv_id, data.get("gold_form", "PHYSICAL_COIN"),
                  float(data.get("purity_karat", 24)), data.get("storage_location", ""))
             )
@@ -251,7 +262,7 @@ def add_investment():
                 maturity_amt = int(round(principal * math.pow(1 + rate_decimal / n, n * 1)))
 
             db.execute(
-                """INSERT INTO fixed_deposits
+                """INSERT OR REPLACE INTO fixed_deposits
                    (investment_id, institution_name, account_number, principal_amount,
                     annual_interest_rate, compounding_frequency, payout_type,
                     start_date, maturity_date, estimated_maturity_amount, status)
@@ -262,27 +273,29 @@ def add_investment():
                  maturity_amt, "ACTIVE")
             )
             # Register maturity event
-            _register_event(db, g.user_id, inv_id, "FD_MATURITY",
-                            mat_date, maturity_amt,
-                            f"{institution} Fixed Deposit Maturity")
+            if mat_date:
+                _register_event(db, g.user_id, inv_id, "FD_MATURITY",
+                                mat_date, maturity_amt,
+                                f"{institution} Fixed Deposit Maturity")
         elif cat == "BOND":
-            face_val = int(round(float(data["face_value"]) * 100)) if "face_value" in data else int(data.get("face_value_cents", 0))
-            qty = float(data.get("quantity", 1))
+            face_val_raw = float(data.get("face_value") or data.get("unit_price") or data.get("price") or 1000)
+            face_val = int(round(face_val_raw * 100)) if face_val_raw > 0 else int(data.get("face_value_cents", 100000))
+            qty = float(data.get("quantity") or data.get("qty") or 1)
+            mat_date = data.get("maturity_date", "") or "2035-12-31"
             db.execute(
-                """INSERT INTO bonds
+                """INSERT OR REPLACE INTO bonds
                    (investment_id, issuer_name, bond_type, face_value, coupon_rate,
                     coupon_frequency, issue_date, maturity_date, credit_rating, status)
                    VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (inv_id, data.get("issuer_name", inst_name), data.get("bond_type", "GOVERNMENT"),
                  face_val, float(data.get("coupon_rate", 0)),
                  data.get("coupon_frequency", "SEMI_ANNUALLY"),
-                 data.get("issue_date", now[:10]), data.get("maturity_date", ""),
+                 data.get("issue_date", now[:10]), mat_date,
                  data.get("credit_rating", "AAA"), "ACTIVE")
             )
-            if data.get("maturity_date"):
-                _register_event(db, g.user_id, inv_id, "BOND_MATURITY",
-                                data["maturity_date"], int(face_val * qty),
-                                f"{inst_name} Bond Redemption/Maturity")
+            _register_event(db, g.user_id, inv_id, "BOND_MATURITY",
+                            mat_date, int(face_val * qty),
+                            f"{inst_name} Bond Redemption/Maturity")
 
         # 4. Record initial purchase transaction
         purchase_date = data.get("purchase_date", now)
@@ -556,27 +569,35 @@ def _get_valuation(db, cat, inv_id, inst_id, qty, cost, symbol=""):
         fd = db.execute("SELECT principal_amount, estimated_maturity_amount FROM fixed_deposits WHERE investment_id=?", (inv_id,)).fetchone()
         if fd:
             cur_val = fd["estimated_maturity_amount"] or fd["principal_amount"]
+            p_cents = fd["principal_amount"]
             result["has_market_price"] = True
-            result["latest_price_cents"] = fd["principal_amount"]
+            result["latest_price_cents"] = p_cents
+            result["latest_price"] = round(p_cents / 100, 2)
             result["has_current_value"] = True
             result["current_value_cents"] = cur_val
+            result["current_value"] = round(cur_val / 100, 2)
             result["has_pnl"] = True
             result["unrealized_pnl_cents"] = cur_val - cost
+            result["unrealized_gain_loss"] = round((cur_val - cost) / 100, 2)
             result["unrealized_pnl_percent"] = (
-                ((cur_val - cost) / cost * 100) if cost > 0 else 0.0
+                round(((cur_val - cost) / cost * 100), 2) if cost > 0 else 0.0
             )
     elif cat == "BOND":
         bd = db.execute("SELECT face_value FROM bonds WHERE investment_id=?", (inv_id,)).fetchone()
-        if bd and qty > 0:
-            cur_val = int(round(bd["face_value"] * qty))
+        face_p = bd["face_value"] if (bd and bd["face_value"]) else cost
+        if qty > 0:
+            cur_val = int(round(face_p * qty))
             result["has_market_price"] = True
-            result["latest_price_cents"] = bd["face_value"]
+            result["latest_price_cents"] = face_p
+            result["latest_price"] = round(face_p / 100, 2)
             result["has_current_value"] = True
             result["current_value_cents"] = cur_val
+            result["current_value"] = round(cur_val / 100, 2)
             result["has_pnl"] = True
             result["unrealized_pnl_cents"] = cur_val - cost
+            result["unrealized_gain_loss"] = round((cur_val - cost) / 100, 2)
             result["unrealized_pnl_percent"] = (
-                ((cur_val - cost) / cost * 100) if cost > 0 else 0.0
+                round(((cur_val - cost) / cost * 100), 2) if cost > 0 else 0.0
             )
     return result
 
@@ -606,9 +627,9 @@ def _validate_investment(data) -> str | None:
         if not data.get("maturity_date"):
             return "Maturity date is required for Fixed Deposits."
     if cat == "BOND":
-        face_val = float(data.get("face_value") or data.get("face_value_cents") or 0)
+        face_val = float(data.get("face_value") or data.get("unit_price") or data.get("price") or data.get("face_value_cents") or 0)
         if face_val <= 0:
-            return "Bond face value must be positive."
+            return "Bond face value or unit price must be positive."
     return None
 
 
