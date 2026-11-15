@@ -65,10 +65,10 @@ def create_app():
     app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
     app.register_blueprint(ipo_bp, url_prefix="/api/ipo")
     app.register_blueprint(news_bp, url_prefix="/api/news")
-    app.register_blueprint(news_bp, url_prefix="/api/market-news")  # frontend alias
+    app.register_blueprint(news_bp, url_prefix="/api/market-news", name="market_news")  # frontend alias
     app.register_blueprint(precious_metals_bp, url_prefix="/api/precious-metals")
     app.register_blueprint(mutual_funds_bp, url_prefix="/api/mutual-funds")
-    app.register_blueprint(mutual_funds_bp, url_prefix="/api/sip")  # frontend alias
+    app.register_blueprint(mutual_funds_bp, url_prefix="/api/sip", name="sip_alias")  # frontend alias
 
     with app.app_context():
         init_db()
