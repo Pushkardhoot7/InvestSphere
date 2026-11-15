@@ -41,13 +41,13 @@ def scheme_detail(scheme_id):
 
 @mutual_funds_bp.route("/compare", methods=["POST"])
 def compare():
-    """Compare 2-4 mutual fund schemes side by side."""
+    """Compare mutual fund schemes side by side (up to 5)."""
     data = request.get_json(silent=True) or {}
     scheme_ids = data.get("scheme_ids", [])
     if not scheme_ids or not isinstance(scheme_ids, list):
-        return error("Please provide a list of 2 to 4 scheme IDs to compare.")
-    if len(scheme_ids) < 2 or len(scheme_ids) > 4:
-        return error("Comparison requires between 2 and 4 schemes.")
+        return error("Please provide a list of scheme IDs to compare.")
+    if len(scheme_ids) < 1 or len(scheme_ids) > 6:
+        return error("Comparison supports between 1 and 5 schemes.")
     schemes = compare_schemes(scheme_ids)
     return success(schemes)
 

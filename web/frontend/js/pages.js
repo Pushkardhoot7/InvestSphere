@@ -1834,15 +1834,40 @@ const Pages = {
 
         <!-- TAB 4: FUND COMPARISON -->
         <div id="tab-sip-comparison" class="sip-tab-pane hidden">
-          <div class="card">
-            <div class="card-header" style="justify-content:space-between;">
-              <div class="card-title">Side-by-Side Scheme Comparison</div>
-              <div class="text-muted" style="font-size:0.85rem;">Select 2 to 4 schemes from the Explorer to compare.</div>
+          <div class="card" style="margin-bottom:1rem;">
+            <div class="card-header" style="justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
+              <div>
+                <div class="card-title">Multi-Scheme Mutual Fund Comparison</div>
+                <div class="text-muted" style="font-size:0.83rem; margin-top:2px;">
+                  Independently search, select, add and remove Indian mutual funds to compare CAGR returns, risk, expense ratio, NAV and AUM side-by-side.
+                </div>
+              </div>
+              <div style="display:flex; gap:0.4rem;">
+                <button class="btn btn-outline btn-sm" onclick="Pages.clearFundComparison()">✕ Clear All</button>
+                <button class="btn btn-primary btn-sm" onclick="Pages.renderComparisonView()">↻ Refresh Comparison</button>
+              </div>
             </div>
+            <div class="card-body">
+              <!-- Search & Quick-Add Bar -->
+              <div style="position:relative; margin-bottom:1rem;">
+                <input type="text" id="compare-fund-search" placeholder="🔍 Search fund name or AMC to add (e.g. Parag Parikh, HDFC, SBI, Index, Quant)..." oninput="Pages.searchCompareFunds(this.value)" autocomplete="off" style="width:100%;"/>
+                <div id="compare-search-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:100; max-height:280px; overflow-y:auto; margin-top:4px;"></div>
+              </div>
+
+              <!-- Selected Fund Chips -->
+              <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.5rem;" id="compare-chips-container">
+                <span class="text-muted" style="font-size:0.85rem; font-weight:600;">Selected Funds:</span>
+                <span id="compare-chips-list" style="display:flex; flex-wrap:wrap; gap:0.4rem;"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Comparison Table & Visual Analytics -->
+          <div class="card">
             <div class="card-body" id="mf-comparison-container">
               <div class="text-center py-4 text-muted">
-                <p>No funds selected for comparison yet.</p>
-                <button class="btn btn-outline btn-sm mt-2" onclick="Pages.switchSIPTab('explorer')">Browse Funds & Compare</button>
+                <p>Select at least 2 mutual funds to see full side-by-side comparison.</p>
+                <button class="btn btn-outline btn-sm mt-2" onclick="Pages.switchSIPTab('explorer')">Browse Funds Explorer</button>
               </div>
             </div>
           </div>
@@ -1914,7 +1939,7 @@ const Pages = {
       container.innerHTML = html;
       this.runSIPCalc();
       this.loadMFSchemes();
-      window._investsphere_compared_funds = new Set(["ppfas-flexi-cap", "mirae-elss-tax"]);
+      window._investsphere_compared_funds = window._investsphere_compared_funds || new Set();
     } catch (err) {
       container.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
     }
@@ -1935,6 +1960,7 @@ const Pages = {
     if (tabId === 'portfolio') {
       this.loadUserSIPs();
     } else if (tabId === 'comparison') {
+      this.renderCompareChips();
       this.renderComparisonView();
     }
   },
@@ -2145,26 +2171,163 @@ const Pages = {
     }
     if (window._investsphere_compared_funds.has(schemeId)) {
       window._investsphere_compared_funds.delete(schemeId);
+      if (typeof showToast === 'function') showToast('Fund removed from comparison.', 'info');
     } else {
-      if (window._investsphere_compared_funds.size >= 4) {
+      if (window._investsphere_compared_funds.size >= 5) {
         if (typeof showToast === 'function') {
-          showToast('You can compare maximum 4 schemes at once.', 'warning');
+          showToast('You can compare maximum 5 schemes at once.', 'warning');
         }
         return;
       }
       window._investsphere_compared_funds.add(schemeId);
+      if (typeof showToast === 'function') showToast('Fund added to comparison.', 'success');
     }
+    this.renderCompareChips();
+  },
+
+  async searchCompareFunds(query) {
+    const dropdown = document.getElementById('compare-search-dropdown');
+    if (!dropdown) return;
+    const q = (query || '').toLowerCase().trim();
+    if (!q) {
+      dropdown.style.display = 'none';
+      dropdown.innerHTML = '';
+      return;
+    }
+
+    let schemes = window._investsphere_all_schemes;
+    if (!schemes || schemes.length === 0) {
+      try {
+        const res = await Api.get('/mutual-funds');
+        schemes = res.data?.schemes || [];
+        window._investsphere_all_schemes = schemes;
+      } catch (e) {
+        schemes = [];
+      }
+    }
+
+    const matched = (schemes || []).filter(s => {
+      const name = (s.name || '').toLowerCase();
+      const short = (s.short_name || '').toLowerCase();
+      const amc = (s.amc || '').toLowerCase();
+      const cat = (s.category || '').toLowerCase();
+      return name.includes(q) || short.includes(q) || amc.includes(q) || cat.includes(q);
+    }).slice(0, 8);
+
+    if (matched.length === 0) {
+      dropdown.innerHTML = '<div style="padding:0.75rem 1rem; color:var(--text-muted); font-size:0.85rem;">No mutual funds match your search.</div>';
+      dropdown.style.display = 'block';
+      return;
+    }
+
+    const compSet = window._investsphere_compared_funds || new Set();
+
+    dropdown.innerHTML = matched.map(s => {
+      const isAdded = compSet.has(s.id);
+      return `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:0.6rem 1rem; border-bottom:1px solid #f1f5f9; hover:background:#f8fafc;">
+          <div>
+            <div style="font-weight:600; font-size:0.88rem; color:var(--text);">${s.short_name || s.name}</div>
+            <div class="text-muted" style="font-size:0.78rem;">
+              ${s.amc} • <span class="badge badge-primary" style="font-size:0.7rem; padding:1px 5px;">${s.category}</span> • 3Y: <span class="text-success font-bold">+${s.returns_3y}%</span>
+            </div>
+          </div>
+          <div>
+            ${isAdded ?
+              `<button class="btn btn-outline btn-sm text-danger" onclick="Pages.removeFundFromCompare('${s.id}')">✕ Remove</button>` :
+              `<button class="btn btn-primary btn-sm" onclick="Pages.addFundToCompare('${s.id}')">+ Add</button>`
+            }
+          </div>
+        </div>
+      `;
+    }).join('');
+    dropdown.style.display = 'block';
+  },
+
+  addFundToCompare(schemeId) {
+    if (!window._investsphere_compared_funds) {
+      window._investsphere_compared_funds = new Set();
+    }
+    if (window._investsphere_compared_funds.size >= 5) {
+      if (typeof showToast === 'function') {
+        showToast('Maximum 5 schemes can be compared simultaneously.', 'warning');
+      }
+      return;
+    }
+    window._investsphere_compared_funds.add(schemeId);
+    const searchInput = document.getElementById('compare-fund-search');
+    if (searchInput) searchInput.value = '';
+    const dropdown = document.getElementById('compare-search-dropdown');
+    if (dropdown) dropdown.style.display = 'none';
+
+    if (typeof showToast === 'function') {
+      showToast('Fund added to comparison.', 'success');
+    }
+    this.renderCompareChips();
+    this.renderComparisonView();
+  },
+
+  removeFundFromCompare(schemeId) {
+    if (window._investsphere_compared_funds) {
+      window._investsphere_compared_funds.delete(schemeId);
+    }
+    this.renderCompareChips();
+    this.renderComparisonView();
+  },
+
+  clearFundComparison() {
+    window._investsphere_compared_funds = new Set();
+    this.renderCompareChips();
+    this.renderComparisonView();
+    if (typeof showToast === 'function') {
+      showToast('Fund comparison list cleared.', 'info');
+    }
+  },
+
+  renderCompareChips() {
+    const listEl = document.getElementById('compare-chips-list');
+    if (!listEl) return;
+    const ids = Array.from(window._investsphere_compared_funds || []);
+    if (ids.length === 0) {
+      listEl.innerHTML = '<span class="text-muted" style="font-size:0.83rem; font-style:italic;">None selected yet. Search above or check "Compare" in the Explorer.</span>';
+      return;
+    }
+
+    const schemes = window._investsphere_all_schemes || [];
+    listEl.innerHTML = ids.map(id => {
+      const s = schemes.find(x => x.id === id);
+      const label = s ? (s.short_name || s.name) : id;
+      return `
+        <span style="display:inline-flex; align-items:center; gap:0.35rem; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; border-radius:18px; padding:0.25rem 0.65rem; font-size:0.82rem; font-weight:600;">
+          ${label}
+          <span style="cursor:pointer; color:#ef4444; font-weight:bold; margin-left:2px;" onclick="Pages.removeFundFromCompare('${id}')" title="Remove">✕</span>
+        </span>
+      `;
+    }).join('');
   },
 
   async renderComparisonView() {
     const container = document.getElementById('mf-comparison-container');
     if (!container) return;
     const ids = Array.from(window._investsphere_compared_funds || []);
+    this.renderCompareChips();
+
     if (ids.length < 2) {
       container.innerHTML = `
         <div class="text-center py-4 text-muted">
-          <p>Please select at least 2 schemes in the Explorer to view side-by-side comparison.</p>
-          <button class="btn btn-outline btn-sm mt-2" onclick="Pages.switchSIPTab('explorer')">Explore Funds</button>
+          <div style="font-size:2.2rem; margin-bottom:0.5rem;">⚖️</div>
+          <h3 style="margin-bottom:0.3rem;">Compare Multiple Mutual Funds</h3>
+          <p style="max-width:500px; margin:0 auto 1rem auto; font-size:0.88rem;">
+            Select at least 2 mutual funds using the search box above or the "Compare" checkboxes in the Explorer tab to review side-by-side returns, CAGR, risk, expense ratio, and portfolio holdings.
+          </p>
+          <div style="display:flex; justify-content:center; gap:0.5rem;">
+            <button class="btn btn-outline btn-sm" onclick="Pages.addFundToCompare('ppfas-flexi-cap'); Pages.addFundToCompare('hdfc-flexi-cap');">
+              + Compare Flexi Cap Leaders
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="Pages.addFundToCompare('uti-nifty-50-index'); Pages.addFundToCompare('mirae-large-cap');">
+              + Compare Large Cap & Index
+            </button>
+          </div>
         </div>
       `;
       return;
@@ -2175,34 +2338,138 @@ const Pages = {
       const res = await Api.post('/mutual-funds/compare', { scheme_ids: ids });
       const schemes = res.data || [];
 
+      if (schemes.length === 0) {
+        container.innerHTML = '<div class="alert alert-error">Unable to load scheme details for comparison.</div>';
+        return;
+      }
+
       container.innerHTML = `
+        <!-- Visual Returns Bar Comparison -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:1.25rem; margin-bottom:1.5rem;">
+          <div style="font-weight:700; font-size:0.95rem; margin-bottom:0.75rem;">Performance Returns Comparison Across Schemes</div>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem;">
+            ${schemes.map(s => `
+              <div style="background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:0.85rem;">
+                <div style="font-weight:700; font-size:0.9rem; color:var(--text); margin-bottom:0.5rem; line-height:1.25;">
+                  ${s.short_name || s.name}
+                </div>
+                <div style="font-size:0.8rem; margin-bottom:0.3rem; display:flex; justify-content:space-between;">
+                  <span class="text-muted">1-Year Return:</span>
+                  <strong class="text-success">+${s.returns_1y !== undefined ? s.returns_1y : '—'}%</strong>
+                </div>
+                <div style="font-size:0.8rem; margin-bottom:0.3rem; display:flex; justify-content:space-between;">
+                  <span class="text-muted">3-Year CAGR:</span>
+                  <strong class="text-success font-bold">+${s.returns_3y !== undefined ? s.returns_3y : '—'}%</strong>
+                </div>
+                <div style="font-size:0.8rem; display:flex; justify-content:space-between;">
+                  <span class="text-muted">5-Year CAGR:</span>
+                  <strong class="text-success">+${s.returns_5y !== undefined ? s.returns_5y : '—'}%</strong>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Detailed Side-by-Side Comparison Table -->
         <div class="table-responsive">
-          <table class="compare-table">
+          <table class="compare-table" style="width:100%; border-collapse:collapse;">
             <thead>
               <tr>
-                <th style="width:200px;">Metric / Attribute</th>
-                ${schemes.map(s => `<th><strong>${s.short_name || s.name}</strong></th>`).join('')}
+                <th style="width:220px; background:#f8fafc;">Metric / Attribute</th>
+                ${schemes.map(s => `
+                  <th>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
+                      <div>
+                        <strong>${s.short_name || s.name}</strong>
+                        <div style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">${s.amc}</div>
+                      </div>
+                      <button class="btn btn-outline btn-sm text-danger" style="padding:1px 6px; font-size:0.75rem;" onclick="Pages.removeFundFromCompare('${s.id}')" title="Remove from comparison">✕</button>
+                    </div>
+                  </th>
+                `).join('')}
               </tr>
             </thead>
             <tbody>
-              <tr><td>Category</td>${schemes.map(s => `<td><span class="badge badge-primary">${s.category}</span></td>`).join('')}</tr>
-              <tr><td>AMC</td>${schemes.map(s => `<td>${s.amc}</td>`).join('')}</tr>
-              <tr><td>Latest NAV</td>${schemes.map(s => `<td><strong>₹${formatNumber(s.nav)}</strong></td>`).join('')}</tr>
-              <tr><td>1-Year Return</td>${schemes.map(s => `<td class="text-success font-bold">+${s.returns_1y}%</td>`).join('')}</tr>
-              <tr><td>3-Year CAGR</td>${schemes.map(s => `<td class="text-success font-bold">+${s.returns_3y}%</td>`).join('')}</tr>
-              <tr><td>5-Year CAGR</td>${schemes.map(s => `<td class="text-success font-bold">+${s.returns_5y}%</td>`).join('')}</tr>
-              <tr><td>Expense Ratio</td>${schemes.map(s => `<td>${s.expense_ratio}%</td>`).join('')}</tr>
-              <tr><td>AUM (Assets)</td>${schemes.map(s => `<td>₹${formatNumber(s.aum_cr)} Cr</td>`).join('')}</tr>
-              <tr><td>Minimum SIP</td>${schemes.map(s => `<td>₹${s.min_sip}</td>`).join('')}</tr>
-              <tr><td>Risk Rating</td>${schemes.map(s => `<td><span class="badge badge-warning">${s.risk}</span></td>`).join('')}</tr>
-              <tr><td>Benchmark</td>${schemes.map(s => `<td>${s.benchmark}</td>`).join('')}</tr>
-              <tr><td>Action</td>${schemes.map(s => `<td><button class="btn btn-outline btn-sm" onclick="Pages.prefillSaveSIP('${s.name}', ${s.min_sip}, ${s.returns_3y})">+ Start SIP</button></td>`).join('')}</tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Category</td>
+                ${schemes.map(s => `<td><span class="badge badge-primary">${s.category || '—'}</span></td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Asset Class</td>
+                ${schemes.map(s => `<td><span class="badge badge-neutral">${s.asset_class || '—'}</span></td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Fund House (AMC)</td>
+                ${schemes.map(s => `<td>${s.amc || '—'}</td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Current NAV</td>
+                ${schemes.map(s => `<td><strong>₹${formatNumber(s.nav)}</strong> <small class="text-muted">(${s.nav_date || 'Live'})</small></td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">1-Year Return</td>
+                ${schemes.map(s => `<td class="text-success font-bold">+${s.returns_1y !== undefined ? s.returns_1y : '—'}%</td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">3-Year CAGR</td>
+                ${schemes.map(s => `<td class="text-success font-bold">+${s.returns_3y !== undefined ? s.returns_3y : '—'}%</td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">5-Year CAGR</td>
+                ${schemes.map(s => `<td class="text-success font-bold">+${s.returns_5y !== undefined ? s.returns_5y : '—'}%</td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">10-Year CAGR</td>
+                ${schemes.map(s => `<td>${s.returns_10y !== undefined ? `<span class="text-success font-bold">+${s.returns_10y}%</span>` : '<span class="text-muted">—</span>'}</td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Expense Ratio</td>
+                ${schemes.map(s => `<td><strong>${s.expense_ratio !== undefined ? s.expense_ratio + '%' : '—'}</strong></td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Total AUM (Assets)</td>
+                ${schemes.map(s => `<td>₹${formatNumber(s.aum_cr)} Cr</td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Minimum Monthly SIP</td>
+                ${schemes.map(s => `<td>₹${formatNumber(s.min_sip)}</td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">SEBI Riskometer</td>
+                ${schemes.map(s => `<td><span class="badge badge-warning">${s.risk || 'Moderate'}</span></td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Morningstar Rating</td>
+                ${schemes.map(s => `<td>${'★'.repeat(s.rating || 4)} <small class="text-muted">(${s.rating || 4}/5)</small></td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Benchmark Index</td>
+                ${schemes.map(s => `<td><small>${s.benchmark || 'NIFTY 500 TRI'}</small></td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Fund Manager(s)</td>
+                ${schemes.map(s => `<td><small>${s.fund_manager || 'Investment Team'}</small></td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Top Holdings</td>
+                ${schemes.map(s => `<td><small class="text-muted">${(s.top_holdings || []).join(', ') || 'Diversified Equity'}</small></td>`).join('')}
+              </tr>
+              <tr>
+                <td style="font-weight:600; background:#f8fafc;">Action</td>
+                ${schemes.map(s => `
+                  <td>
+                    <button class="btn btn-primary btn-sm" onclick="Pages.prefillSaveSIP('${s.name.replace(/'/g, "\\'")}', ${s.min_sip || 1000}, ${s.returns_3y || 12})">
+                      + Start SIP
+                    </button>
+                  </td>
+                `).join('')}
+              </tr>
             </tbody>
           </table>
         </div>
       `;
     } catch (err) {
-      container.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      container.innerHTML = `<div class="alert alert-error">Failed to compare schemes: ${err.message}</div>`;
     }
   },
 
@@ -2427,14 +2694,14 @@ const Pages = {
       const res = await Api.post('/calculators/swp', {
         initial_corpus,
         monthly_withdrawal,
-        annual_rate,
-        tenure_years
+        annual_return_percent: annual_rate,
+        duration_years: tenure_years
       });
 
       const d = res.data || {};
       const withdrawn = d.total_withdrawn || 0;
       const finalBal = d.final_balance || 0;
-      const depleted = d.is_depleted;
+      const depleted = d.depleted;
 
       if (resBox) {
         resBox.innerHTML = `
@@ -2454,7 +2721,7 @@ const Pages = {
           </div>
           ${depleted ? `
             <div class="alert alert-error mt-2">
-              ⚠ Warning: The corpus was depleted in <strong>Year ${d.depleted_in_year || '—'}</strong> before the full ${tenure_years} years.
+              ⚠ Warning: The corpus was depleted in <strong>Year ${d.depleted_at_year || '—'}</strong> before the full ${tenure_years} years.
             </div>
           ` : `
             <div class="alert alert-success mt-2">
@@ -2464,14 +2731,14 @@ const Pages = {
         `;
       }
 
-      if (d.schedule && d.schedule.length > 0 && schedCard && schedTable) {
-        schedTable.innerHTML = d.schedule.map(s => `
+      if (d.yearly_breakdown && d.yearly_breakdown.length > 0 && schedCard && schedTable) {
+        schedTable.innerHTML = d.yearly_breakdown.map(s => `
           <tr>
             <td><strong>Year ${s.year}</strong></td>
             <td>${formatINR(s.opening_balance)}</td>
-            <td>${formatINR(s.withdrawn_this_year || s.yearly_withdrawal || 0)}</td>
+            <td>${formatINR(s.total_withdrawn_this_year || 0)}</td>
             <td class="text-success font-bold">+${formatINR(s.interest_earned || 0)}</td>
-            <td class="font-bold">${formatINR(s.closing_balance)}</td>
+            <td class="font-bold">${formatINR(s.balance_at_year_end)}</td>
           </tr>
         `).join('');
         schedCard.classList.remove('hidden');
@@ -2492,32 +2759,53 @@ const Pages = {
 
       let html = `
         <div class="page-header">
-          <h2>FD & Bond Maturity Tracker</h2>
+          <div>
+            <h2>Fixed Income & Maturity Tracker</h2>
+            <p class="text-muted" style="font-size:0.88rem; margin-top:2px;">
+              Auto-synced tracking for Bank Fixed Deposits, Corporate Bonds, and Government Securities with instrument-specific interest accrual and maturity timelines.
+            </p>
+          </div>
           <div class="topbar-actions">
-            <button class="btn btn-primary btn-sm" onclick="Modals.open('modal-add-investment')">+ Add Fixed Deposit</button>
+            <button class="btn btn-outline btn-sm" onclick="App.refreshCurrentPage()">↻ Refresh Schedule</button>
+            <button class="btn btn-primary btn-sm" onclick="Modals.open('modal-add-investment')">+ Add Maturity Asset</button>
           </div>
         </div>
 
-        <div class="summary-grid">
+        <!-- Summary Metric Cards -->
+        <div class="summary-grid" style="grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
           <div class="summary-card ${sum.overdue_count > 0 ? 'card-danger' : ''}">
-            <div class="summary-label">Overdue / Matured</div>
-            <div class="summary-value ${sum.overdue_count > 0 ? 'text-danger' : ''}">${sum.overdue_count || 0}</div>
-            <div class="summary-sub">Action required</div>
+            <div class="summary-label">OVERDUE / MATURED</div>
+            <div class="summary-value ${sum.overdue_count > 0 ? 'text-danger' : ''}" style="font-size:1.45rem;">${sum.overdue_count || 0}</div>
+            <div class="summary-sub">${sum.overdue_count > 0 ? 'Immediate action required' : 'No overdue deposits'}</div>
           </div>
           <div class="summary-card ${sum.due_30_count > 0 ? 'card-warning' : ''}">
-            <div class="summary-label">Maturing in 30 Days</div>
-            <div class="summary-value">${sum.due_30_count || 0}</div>
-            <div class="summary-sub">${formatINR(sum.due_30_amount || 0)}</div>
+            <div class="summary-label">MATURING IN 30 DAYS</div>
+            <div class="summary-value" style="font-size:1.45rem;">${sum.due_30_count || 0}</div>
+            <div class="summary-sub text-muted">${formatINR(sum.due_30_amount || 0)}</div>
           </div>
           <div class="summary-card">
-            <div class="summary-label">Maturing in 90 Days</div>
-            <div class="summary-value">${sum.due_90_count || 0}</div>
-            <div class="summary-sub">${formatINR(sum.due_90_amount || 0)}</div>
+            <div class="summary-label">MATURING IN 90 DAYS</div>
+            <div class="summary-value" style="font-size:1.45rem;">${sum.due_90_count || 0}</div>
+            <div class="summary-sub text-muted">${formatINR(sum.due_90_amount || 0)}</div>
           </div>
           <div class="summary-card card-primary">
-            <div class="summary-label">Total Tracking Value</div>
-            <div class="summary-value">${formatINR(sum.total_maturity_amount || 0)}</div>
-            <div class="summary-sub">${events.length} active deposits</div>
+            <div class="summary-label">TOTAL MATURITY VALUE</div>
+            <div class="summary-value font-bold" style="font-size:1.45rem;">${formatINR(sum.total_maturity_amount || 0)}</div>
+            <div class="summary-sub text-muted">${events.length} tracked instruments</div>
+          </div>
+        </div>
+
+        <!-- Filter & Search Controls -->
+        <div class="filter-bar" style="margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem; justify-content:space-between;">
+          <div class="pill-bar" style="margin-bottom:0;" id="maturity-filter-pills">
+            <button class="pill-btn active" onclick="Pages.filterMaturityTable('ALL')">All (${events.length})</button>
+            <button class="pill-btn" onclick="Pages.filterMaturityTable('UPCOMING')">Active Upcoming</button>
+            <button class="pill-btn" onclick="Pages.filterMaturityTable('DUE30')">Due in 30 Days (${sum.due_30_count || 0})</button>
+            <button class="pill-btn" onclick="Pages.filterMaturityTable('OVERDUE')">Overdue (${sum.overdue_count || 0})</button>
+            <button class="pill-btn" onclick="Pages.filterMaturityTable('COMPLETED')">Settled / Completed</button>
+          </div>
+          <div style="min-width:240px;">
+            <input type="text" id="maturity-search-input" placeholder="🔍 Search bank or bond issuer..." oninput="Pages.searchMaturityTable(this.value)"/>
           </div>
         </div>
 
@@ -2526,45 +2814,81 @@ const Pages = {
             ${events.length === 0 ? `
               <div class="empty-state">
                 <span class="empty-icon">📅</span>
-                <h3>No Fixed Deposits or Bonds Found</h3>
-                <p>Add fixed deposits or bonds with maturity dates to track principal and interest payoffs.</p>
-                <button class="btn btn-primary mt-2" onclick="Modals.open('modal-add-investment')">Add Fixed Deposit</button>
+                <h3>No Maturity-Based Investments Detected</h3>
+                <p>Add fixed deposits or bonds with maturity dates in your Portfolio or via "+ Add Maturity Asset". They will automatically appear here with compound interest calculations.</p>
+                <button class="btn btn-primary mt-2" onclick="Modals.open('modal-add-investment')">+ Add Fixed Deposit / Bond</button>
               </div>
             ` : `
               <div class="table-responsive">
-                <table>
+                <table id="maturity-main-table">
                   <thead>
                     <tr>
-                      <th>Institution / Instrument</th>
+                      <th>Institution / Issuer</th>
                       <th>Category</th>
+                      <th>Interest / Coupon</th>
                       <th>Maturity Date</th>
-                      <th>Time Remaining</th>
+                      <th>Timeline</th>
                       <th>Principal (₹)</th>
-                      <th>Maturity Amount (₹)</th>
+                      <th>Expected Gain (₹)</th>
+                      <th>Maturity Value (₹)</th>
                       <th>Status</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody id="maturity-table-body">
                     ${events.map(e => {
-                      const days = e.days_remaining;
+                      const days = e.days_remaining !== undefined ? e.days_remaining : 0;
+                      const isProcessed = e.status === 'PROCESSED';
                       let badgeCls = 'badge-success';
-                      let label = `${days} days`;
-                      if (days < 0) {
+                      let label = `${days} days left`;
+                      let filterGroup = 'UPCOMING';
+
+                      if (isProcessed) {
+                        badgeCls = 'badge-neutral';
+                        label = 'Settled';
+                        filterGroup = 'COMPLETED';
+                      } else if (days < 0) {
                         badgeCls = 'badge-danger';
-                        label = `${Math.abs(days)}d overdue`;
+                        label = `${Math.abs(days)}d Overdue`;
+                        filterGroup = 'OVERDUE';
                       } else if (days <= 30) {
                         badgeCls = 'badge-warning';
+                        label = `⚡ ${days}d Left`;
+                        filterGroup = 'DUE30';
                       }
 
+                      const rateLabel = e.interest_rate ? `${e.interest_rate}% p.a.` : '—';
+                      const freqLabel = e.compounding_frequency ? `<small class="text-muted">(${e.compounding_frequency})</small>` : (e.coupon_frequency ? `<small class="text-muted">(${e.coupon_frequency})</small>` : '');
+                      const expGain = e.expected_returns !== undefined ? e.expected_returns : (e.maturity_amount - e.principal_amount);
+
                       return `
-                        <tr>
-                          <td><strong>${e.institution_name || e.instrument_name || '—'}</strong></td>
+                        <tr data-filter="${filterGroup}" data-status="${e.status}" data-search="${((e.institution_name || '') + ' ' + (e.instrument_name || '')).toLowerCase()}">
+                          <td>
+                            <strong>${e.institution_name || e.instrument_name || '—'}</strong>
+                            ${e.description ? `<br><small class="text-muted">${e.description}</small>` : ''}
+                          </td>
                           <td>${getCategoryBadge(e.type_code || 'FIXED_DEPOSIT')}</td>
-                          <td>${formatDate(e.maturity_date)}</td>
+                          <td>
+                            <strong>${rateLabel}</strong> ${freqLabel}
+                          </td>
+                          <td class="font-bold">${formatDate(e.maturity_date || e.event_date)}</td>
                           <td><span class="badge ${badgeCls}">${label}</span></td>
                           <td>${formatINR(e.principal_amount)}</td>
-                          <td class="font-bold">${formatINR(e.maturity_amount || e.principal_amount)}</td>
-                          <td><span class="badge ${e.status === 'ACTIVE' ? 'badge-info' : 'badge-neutral'}">${e.status}</span></td>
+                          <td class="text-success font-bold">${expGain > 0 ? '+' + formatINR(expGain) : '—'}</td>
+                          <td class="font-bold" style="color:var(--primary); font-size:1.02rem;">${formatINR(e.maturity_amount || e.principal_amount)}</td>
+                          <td>
+                            <span class="badge ${isProcessed ? 'badge-neutral' : (days < 0 ? 'badge-danger' : 'badge-info')}">
+                              ${isProcessed ? 'COMPLETED' : (days < 0 ? 'OVERDUE' : e.status)}
+                            </span>
+                          </td>
+                          <td>
+                            <div style="display:flex; gap:0.3rem;">
+                              ${isProcessed ?
+                                `<button class="btn btn-outline btn-sm" onclick="Pages.updateMaturityStatus(${e.event_id}, 'PENDING')" title="Re-open into active tracking">Re-open</button>` :
+                                `<button class="btn btn-success btn-sm" onclick="Pages.updateMaturityStatus(${e.event_id}, 'PROCESSED')" title="Mark Matured & Settled">✓ Settle</button>`
+                              }
+                            </div>
+                          </td>
                         </tr>
                       `;
                     }).join('')}
@@ -2580,6 +2904,54 @@ const Pages = {
     } catch (err) {
       container.innerHTML = `<div class="alert alert-error">Failed to load maturity schedule: ${err.message}</div>`;
     }
+  },
+
+  async updateMaturityStatus(eventId, newStatus) {
+    try {
+      const res = await Api.put(`/maturity/${eventId}`, { status: newStatus });
+      if (res.success || res.status === 'ok') {
+        if (typeof showToast === 'function') {
+          showToast(`Maturity event marked as ${newStatus}.`, 'success');
+        }
+        App.refreshCurrentPage();
+      } else {
+        throw new Error(res.error || 'Failed to update status');
+      }
+    } catch (err) {
+      if (typeof showToast === 'function') {
+        showToast(err.message, 'error');
+      }
+    }
+  },
+
+  filterMaturityTable(filter) {
+    document.querySelectorAll('#maturity-filter-pills .pill-btn').forEach(btn => btn.classList.remove('active'));
+    event?.target?.classList.add('active');
+
+    const rows = document.querySelectorAll('#maturity-table-body tr');
+    rows.forEach(r => {
+      const group = r.getAttribute('data-filter');
+      if (filter === 'ALL') {
+        r.style.display = '';
+      } else if (filter === 'UPCOMING') {
+        r.style.display = (group === 'UPCOMING' || group === 'DUE30') ? '' : 'none';
+      } else if (filter === 'DUE30') {
+        r.style.display = group === 'DUE30' ? '' : 'none';
+      } else if (filter === 'OVERDUE') {
+        r.style.display = group === 'OVERDUE' ? '' : 'none';
+      } else if (filter === 'COMPLETED') {
+        r.style.display = group === 'COMPLETED' ? '' : 'none';
+      }
+    });
+  },
+
+  searchMaturityTable(query) {
+    const q = (query || '').toLowerCase().trim();
+    const rows = document.querySelectorAll('#maturity-table-body tr');
+    rows.forEach(r => {
+      const text = r.getAttribute('data-search') || '';
+      r.style.display = (!q || text.includes(q)) ? '' : 'none';
+    });
   },
 
   // ─── ANALYTICS ─────────────────────────────────────────────────────────────

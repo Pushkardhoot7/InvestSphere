@@ -102,8 +102,8 @@ def calculate_swp():
     try:
         corpus = float(data.get("initial_corpus") or 0)
         withdrawal = float(data.get("monthly_withdrawal") or 0)
-        rate = float(data.get("annual_return_percent") or 0)
-        years = int(data.get("duration_years") or 0)
+        rate = float(data.get("annual_return_percent") or data.get("annual_rate") or 0)
+        years = int(data.get("duration_years") or data.get("tenure_years") or 0)
     except (ValueError, TypeError):
         return error("Invalid numeric input.")
 
@@ -131,6 +131,8 @@ def calculate_swp():
     for y in range(1, years + 1):
         year_withdrawn = 0.0
         year_depleted = False
+        year_opening_balance = balance
+        year_interest = 0.0
 
         for m in range(1, 13):
             if depleted:
@@ -142,6 +144,7 @@ def calculate_swp():
             # 1. Growth phase
             interest = 0.0 if zero_rate else balance * r
             total_interest += interest
+            year_interest += interest
             balance += interest
 
             # 2. Withdrawal phase
@@ -182,6 +185,8 @@ def calculate_swp():
             "monthly_withdrawal": withdrawal,
             "total_withdrawn_this_year": round(year_withdrawn, 2),
             "balance_at_year_end": round(balance, 2),
+            "opening_balance": round(year_opening_balance, 2),
+            "interest_earned": round(year_interest, 2),
             "depleted_this_year": year_depleted,
             "depleted_at_month": depleted_month if year_depleted else 0,
         })
@@ -199,9 +204,12 @@ def calculate_swp():
         "total_earnings": round(total_interest, 2),
         "withdrawals_completed": withdrawals_completed,
         "depleted": depleted,
+        "is_depleted": depleted,
         "depleted_at_month": depleted_month,
         "depleted_at_year": ((depleted_month + 11) // 12) if depleted else 0,
+        "depleted_in_year": ((depleted_month + 11) // 12) if depleted else 0,
         "yearly_breakdown": yearly_breakdown,
+        "schedule": yearly_breakdown,
     }
     return success(result)
 
