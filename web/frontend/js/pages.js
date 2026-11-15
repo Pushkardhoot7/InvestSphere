@@ -441,12 +441,14 @@ const Pages = {
     try {
       const [overviewRes, quotesRes] = await Promise.all([
         Api.get('/market/overview').catch(() => ({ data: {} })),
-        Api.get('/market/quotes').catch(() => ({ data: [] }))
+        Api.get('/market/stocks?limit=600').catch(() => Api.get('/market/quotes').catch(() => ({ data: [] })))
       ]);
 
       const overview = overviewRes.data || {};
       const indices = overview.indices || [];
-      const allQuotes = Array.isArray(quotesRes.data) ? quotesRes.data : (quotesRes.data?.quotes || []);
+      const allQuotes = Array.isArray(quotesRes.data)
+        ? quotesRes.data
+        : (quotesRes.data?.stocks || quotesRes.data?.quotes || []);
       const marketStatus = overview.market_status || 'CLOSED (After Hours)';
       const statusClass = marketStatus.includes('OPEN') ? 'badge-success' : 'badge-neutral';
 

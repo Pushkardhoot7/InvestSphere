@@ -10,10 +10,23 @@ from app import get_db
 from helpers import require_auth, success, error
 from services.market_data_service import (
     get_stock_quote, get_market_overview, get_stock_history,
-    search_stocks, POPULAR_INDIAN_STOCKS, normalize_symbol, get_market_status
+    search_stocks, get_all_stocks, POPULAR_INDIAN_STOCKS, normalize_symbol, get_market_status
 )
 
 market_bp = Blueprint("market", __name__)
+
+
+@market_bp.route("/stocks", methods=["GET"])
+@require_auth
+def get_stocks():
+    """Paginated 500-stock NSE/BSE catalog with live/fallback quotes."""
+    page = max(1, int(request.args.get("page", 1)))
+    limit = min(600, max(1, int(request.args.get("limit", 50))))
+    sector = request.args.get("sector", "")
+    exchange = request.args.get("exchange", "")
+    search = request.args.get("search", request.args.get("q", ""))
+    data = get_all_stocks(page=page, limit=limit, sector=sector, exchange=exchange, search=search)
+    return success(data)
 
 
 @market_bp.route("/quotes", methods=["GET"])
@@ -37,7 +50,7 @@ def get_quotes():
         ).fetchall()
         sym_list = [r["symbol"] for r in rows]
         if not sym_list:
-            sym_list = [s["display_symbol"] for s in POPULAR_INDIAN_STOCKS[:12]]
+            sym_list = [s["display_symbol"] for s in POPULAR_INDIAN_STOCKS[:50]]
 
     quotes = []
     for sym in sym_list:
