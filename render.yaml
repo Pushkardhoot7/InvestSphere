@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: investsphere
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: pip install -r web/backend/requirements.txt
+    startCommand: gunicorn --chdir web/backend wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        value: /opt/render/project/src/web/backend/investsphere_web.db
+      - key: ALLOWED_ORIGINS
+        value: "*"
+    healthCheckPath: /api/health
+

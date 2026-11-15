@@ -1,0 +1,226 @@
+erDiagram
+    %% ========================================================================
+    %% InvestSphere — Complete Entity Relationship Diagram (3NF)
+    %% ========================================================================
+
+    USERS ||--o{ INVESTMENTS : "owns"
+    USERS ||--o{ TRANSACTIONS : "executes"
+    USERS ||--o{ SIP_PLANS : "plans"
+    USERS ||--o{ SWP_PLANS : "plans"
+    USERS ||--o{ PORTFOLIO_SNAPSHOTS : "records"
+    USERS ||--o{ FINANCIAL_EVENTS : "tracks"
+    USERS ||--o{ AUDIT_LOGS : "triggers"
+
+    INVESTMENT_TYPES ||--o{ INSTRUMENTS : "categorizes"
+
+    INSTRUMENTS ||--o{ INVESTMENTS : "referenced_by"
+    INSTRUMENTS ||--|| STOCKS : "specializes"
+    INSTRUMENTS ||--|| MUTUAL_FUNDS : "specializes"
+    INSTRUMENTS ||--o{ MARKET_PRICES : "has_history"
+    INSTRUMENTS ||--o{ MUTUAL_FUND_NAV : "has_nav"
+    INSTRUMENTS ||--o{ SIP_PLANS : "targeted_by"
+    INSTRUMENTS ||--o{ SWP_PLANS : "targeted_by"
+
+    INVESTMENTS ||--|| GOLD_HOLDINGS : "specializes"
+    INVESTMENTS ||--|| FIXED_DEPOSITS : "specializes"
+    INVESTMENTS ||--|| BONDS : "specializes"
+    INVESTMENTS ||--o{ TRANSACTIONS : "accumulates"
+    INVESTMENTS ||--o{ FINANCIAL_EVENTS : "schedules"
+
+    USERS {
+        int user_id PK
+        string full_name
+        string email UK
+        string password_hash
+        string account_status
+        string created_at
+        string updated_at
+    }
+
+    INVESTMENT_TYPES {
+        int investment_type_id PK
+        string type_code UK
+        string type_name UK
+        string description
+        int is_active
+    }
+
+    INSTRUMENTS {
+        int instrument_id PK
+        int investment_type_id FK
+        string symbol UK
+        string instrument_name
+        string currency
+        string exchange
+        string description
+        int is_active
+        string created_at
+    }
+
+    INVESTMENTS {
+        int investment_id PK
+        int user_id FK
+        int instrument_id FK
+        string portfolio_tag
+        string notes
+        string status
+        string created_at
+        string updated_at
+    }
+
+    STOCKS {
+        int instrument_id PK,FK
+        string isin UK
+        string sector
+        string industry
+        string market_cap_category
+    }
+
+    MUTUAL_FUNDS {
+        int instrument_id PK,FK
+        string amc_name
+        string fund_category
+        string plan_type
+        string benchmark_index
+        float expense_ratio
+    }
+
+    GOLD_HOLDINGS {
+        int investment_id PK,FK
+        string gold_form
+        float purity_karat
+        string storage_location
+    }
+
+    FIXED_DEPOSITS {
+        int investment_id PK,FK
+        string institution_name
+        string account_number
+        int principal_amount
+        float annual_interest_rate
+        string compounding_frequency
+        string payout_type
+        string start_date
+        string maturity_date
+        int estimated_maturity_amount
+        string status
+    }
+
+    BONDS {
+        int investment_id PK,FK
+        string issuer_name
+        string bond_type
+        int face_value
+        float coupon_rate
+        string coupon_frequency
+        string issue_date
+        string maturity_date
+        string credit_rating
+        string status
+    }
+
+    TRANSACTIONS {
+        int transaction_id PK
+        int user_id FK
+        int investment_id FK
+        string transaction_type
+        string transaction_date
+        float quantity
+        int unit_price
+        int gross_amount
+        int fees
+        int taxes
+        int net_amount
+        string notes
+        string created_at
+    }
+
+    MARKET_PRICES {
+        int price_id PK
+        int instrument_id FK
+        int price
+        string observation_timestamp
+        string source
+        string currency
+    }
+
+    MUTUAL_FUND_NAV {
+        int nav_id PK
+        int instrument_id FK
+        float nav_value
+        string observation_date
+        string source
+    }
+
+    SIP_PLANS {
+        int sip_plan_id PK
+        int user_id FK
+        int instrument_id FK
+        string plan_name
+        int monthly_amount
+        float expected_annual_return
+        int duration_months
+        string start_date
+        string end_date
+        int contribution_day_of_month
+        int projected_invested_capital
+        int projected_future_value
+        string status
+        string created_at
+    }
+
+    SWP_PLANS {
+        int swp_plan_id PK
+        int user_id FK
+        int instrument_id FK
+        string plan_name
+        int initial_corpus
+        int monthly_withdrawal
+        float expected_annual_return
+        int duration_months
+        string start_date
+        int withdrawal_day_of_month
+        int projected_final_balance
+        string status
+        string created_at
+    }
+
+    PORTFOLIO_SNAPSHOTS {
+        int snapshot_id PK
+        int user_id FK
+        string snapshot_timestamp
+        int total_invested
+        int estimated_portfolio_value
+        int realized_profit_loss
+        int unrealized_profit_loss
+        string notes
+    }
+
+    FINANCIAL_EVENTS {
+        int event_id PK
+        int user_id FK
+        int investment_id FK
+        string event_type
+        string event_date
+        int amount
+        string status
+        string description
+        string created_at
+    }
+
+    AUDIT_LOGS {
+        int audit_id PK
+        int user_id FK
+        string action_type
+        string entity_type
+        int entity_id
+        string action_timestamp
+        string description
+    }
+
+    SCHEMA_MIGRATIONS {
+        int migration_id PK
+        int version UK
+        string description
+        string applied_at
+    }

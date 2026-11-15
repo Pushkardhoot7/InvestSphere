@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="InvestSphere — Smart Investment & Portfolio Management System"/>
+  <title>InvestSphere — Smart Investment & Portfolio Management</title>
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>"/>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     AUTH SECTION (shown when logged out)
+══════════════════════════════════════════════════ -->
+<div id="auth-section" class="auth-wrapper">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="brand-icon">📈</span>
+      <h1>InvestSphere</h1>
+      <p class="tagline">One Platform. Every Investment. Smarter Decisions.</p>
+    </div>
+
+    <!-- Login Form -->
+    <div id="login-form">
+      <h2>Sign In</h2>
+      <div id="login-error" class="alert alert-error hidden"></div>
+      <div class="form-group">
+        <label for="login-email">Email Address</label>
+        <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" required/>
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="Your password" autocomplete="current-password" required/>
+      </div>
+      <button class="btn btn-primary btn-block" id="btn-login">Sign In</button>
+      <p class="auth-switch">Don't have an account? <a href="#" id="show-register">Create one</a></p>
+      <p class="auth-switch demo-hint">
+        <strong>Demo:</strong> Register a new account to explore the full app.
+      </p>
+    </div>
+
+    <!-- Register Form -->
+    <div id="register-form" class="hidden">
+      <h2>Create Account</h2>
+      <p class="auth-subtitle">Join thousands of disciplined investors building long-term wealth.</p>
+      <div id="register-error" class="alert alert-error hidden"></div>
+      <div id="register-success" class="alert alert-success hidden"></div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="reg-name">Full Name <span class="req">*</span></label>
+          <input type="text" id="reg-name" placeholder="Pushkar Dhoot" autocomplete="name" required/>
+        </div>
+        <div class="form-group">
+          <label for="reg-email">Email Address <span class="req">*</span></label>
+          <input type="email" id="reg-email" placeholder="you@example.com" autocomplete="email" required/>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="reg-mobile">Mobile Number <span class="req">*</span></label>
+          <input type="tel" id="reg-mobile" placeholder="10-digit mobile e.g. 9876543210" autocomplete="tel" required/>
+        </div>
+        <div class="form-group">
+          <label for="reg-dob">Date of Birth <span class="req">*</span></label>
+          <input type="date" id="reg-dob" required/>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="reg-country">Country <span class="req">*</span></label>
+          <select id="reg-country" required>
+            <option value="India" selected>India</option>
+            <option value="United States">United States</option>
+            <option value="United Kingdom">United Kingdom</option>
+            <option value="United Arab Emirates">United Arab Emirates</option>
+            <option value="Singapore">Singapore</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="reg-state">State / Region <span class="req">*</span></label>
+          <select id="reg-state" required>
+            <option value="Maharashtra" selected>Maharashtra (Pune / Mumbai)</option>
+            <option value="Delhi">Delhi NCR</option>
+            <option value="Karnataka">Karnataka (Bengaluru)</option>
+            <option value="Gujarat">Gujarat (Ahmedabad)</option>
+            <option value="Tamil Nadu">Tamil Nadu (Chennai)</option>
+            <option value="Telangana">Telangana (Hyderabad)</option>
+            <option value="Uttar Pradesh">Uttar Pradesh</option>
+            <option value="West Bengal">West Bengal (Kolkata)</option>
+            <option value="Rajasthan">Rajasthan</option>
+            <option value="Madhya Pradesh">Madhya Pradesh</option>
+            <option value="Kerala">Kerala</option>
+            <option value="Punjab">Punjab</option>
+            <option value="Haryana">Haryana</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="reg-pan">PAN Number <span class="optional">(Optional for demo, 10 alphanumeric)</span></label>
+        <input type="text" id="reg-pan" placeholder="e.g. ABCDE1234F" maxlength="10" style="text-transform:uppercase"/>
+        <small class="field-hint">Your PAN is masked and encrypted. Never shared publicly.</small>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="reg-password">Password <span class="req">*</span></label>
+          <input type="password" id="reg-password" placeholder="Min 8 chars, 1 letter + 1 digit" autocomplete="new-password" required/>
+        </div>
+        <div class="form-group">
+          <label for="reg-confirm">Confirm Password <span class="req">*</span></label>
+          <input type="password" id="reg-confirm" placeholder="Repeat password" autocomplete="new-password" required/>
+        </div>
+      </div>
+
+      <!-- Math CAPTCHA Challenge (no third-party dependency) -->
+      <div class="form-group captcha-wrapper">
+        <label for="reg-captcha-answer">Security Check <span class="req">*</span></label>
+        <div class="math-captcha-box" id="math-captcha-box">
+          <div class="math-captcha-question">
+            <span class="captcha-icon">🔢</span>
+            <span id="captcha-question-text">Loading…</span>
+            <button type="button" class="captcha-refresh" id="btn-refresh-captcha" title="New question">↺</button>
+          </div>
+          <input type="number" id="reg-captcha-answer" placeholder="Your answer" autocomplete="off" required min="0" max="999"/>
+          <small class="field-hint">Solve the simple math question to verify you're human.</small>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="btn-register">Register</button>
+      <p class="auth-switch">Already have an account? <a href="#" id="show-login">Sign in</a></p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     MAIN APP (shown when logged in)
+══════════════════════════════════════════════════ -->
+<div id="app-section" class="hidden app-layout">
+
+  <!-- Sidebar -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon">📈</span>
+      <span class="brand-name">InvestSphere</span>
+      <button class="sidebar-close" id="sidebar-close" aria-label="Close menu">✕</button>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="user-avatar">U</div>
+      <div class="user-info">
+        <div class="user-name" id="sidebar-user-name">Loading…</div>
+        <div class="user-email" id="sidebar-user-email"></div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">🏠</span><span class="nav-label">Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-page="portfolio">
+        <span class="nav-icon">💼</span><span class="nav-label">Portfolio</span>
+      </a>
+      <a href="#" class="nav-item" data-page="transactions">
+        <span class="nav-icon">📋</span><span class="nav-label">Transactions</span>
+      </a>
+      <a href="#" class="nav-item" data-page="stocks">
+        <span class="nav-icon">📡</span><span class="nav-label">Stocks & Watchlist</span>
+      </a>
+      <a href="#" class="nav-item" data-page="ipo">
+        <span class="nav-icon">🚀</span><span class="nav-label">IPO Center</span>
+      </a>
+      <a href="#" class="nav-item" data-page="news">
+        <span class="nav-icon">📰</span><span class="nav-label">Market News</span>
+      </a>
+      <a href="#" class="nav-item" data-page="precious-metals">
+        <span class="nav-icon">🏆</span><span class="nav-label">Gold & Silver</span>
+      </a>
+      <a href="#" class="nav-item" data-page="sip">
+        <span class="nav-icon">🔄</span><span class="nav-label">SIP & Mutual Funds</span>
+      </a>
+      <a href="#" class="nav-item" data-page="swp">
+        <span class="nav-icon">💸</span><span class="nav-label">SWP Calculator</span>
+      </a>
+      <a href="#" class="nav-item" data-page="maturity">
+        <span class="nav-icon">📅</span><span class="nav-label">Maturity Tracker</span>
+      </a>
+      <a href="#" class="nav-item" data-page="analytics">
+        <span class="nav-icon">📊</span><span class="nav-label">Analytics</span>
+      </a>
+      <a href="#" class="nav-item" data-page="reports">
+        <span class="nav-icon">📄</span><span class="nav-label">Reports</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="btn btn-outline btn-block" id="btn-logout">Sign Out</button>
+    </div>
+  </aside>
+
+  <!-- Main content area -->
+  <div class="main-wrapper">
+    <header class="topbar">
+      <button class="hamburger" id="sidebar-toggle" aria-label="Toggle menu">☰</button>
+      <div class="topbar-title" id="page-title">Dashboard</div>
+      <div class="topbar-actions">
+        <button class="btn btn-primary btn-sm" id="btn-add-investment">+ Add Investment</button>
+      </div>
+    </header>
+
+    <main class="page-content" id="page-content">
+      <!-- Pages injected by JS -->
+    </main>
+  </div>
+
+  <!-- Overlay for mobile sidebar -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     MODALS
+══════════════════════════════════════════════════ -->
+<!-- Add Investment Modal -->
+<div class="modal-backdrop hidden" id="modal-add-investment">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Add New Investment</h3>
+      <button class="modal-close" data-close="modal-add-investment">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="add-inv-error" class="alert alert-error hidden"></div>
+      <div class="form-group">
+        <label>Asset Category *</label>
+        <select id="inv-category">
+          <option value="STOCK">📈 Equity Stock</option>
+          <option value="MUTUAL_FUND">🏦 Mutual Fund</option>
+          <option value="GOLD">🥇 Gold</option>
+          <option value="FIXED_DEPOSIT">🏛️ Fixed Deposit</option>
+          <option value="BOND">📜 Bond / Debenture</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Symbol / Scheme Code *</label>
+          <input type="text" id="inv-symbol" placeholder="e.g. RELIANCE, FD-SBI-01"/>
+        </div>
+        <div class="form-group">
+          <label>Name *</label>
+          <input type="text" id="inv-name" placeholder="Full instrument name"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Purchase Date *</label>
+          <input type="date" id="inv-date"/>
+        </div>
+        <div class="form-group" id="inv-qty-group">
+          <label>Quantity *</label>
+          <input type="number" id="inv-qty" placeholder="Units / shares" min="0" step="any"/>
+        </div>
+      </div>
+      <div class="form-row" id="inv-price-row">
+        <div class="form-group">
+          <label>Unit Price (₹) *</label>
+          <input type="number" id="inv-price" placeholder="Price per unit" min="0" step="0.01"/>
+        </div>
+        <div class="form-group">
+          <label>Total Amount (₹)</label>
+          <input type="number" id="inv-total" placeholder="Auto-calculated" min="0" step="0.01"/>
+        </div>
+      </div>
+      <!-- FD-specific fields -->
+      <div id="fd-fields" class="hidden">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Institution Name *</label>
+            <input type="text" id="inv-institution" placeholder="e.g. State Bank of India"/>
+          </div>
+          <div class="form-group">
+            <label>Principal Amount (₹) *</label>
+            <input type="number" id="inv-principal" placeholder="Deposit amount" min="0"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Annual Interest Rate (%)</label>
+            <input type="number" id="inv-rate" placeholder="e.g. 7.1" min="0" max="100" step="0.01"/>
+          </div>
+          <div class="form-group">
+            <label>Maturity Date *</label>
+            <input type="date" id="inv-maturity"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Compounding</label>
+            <select id="inv-compounding">
+              <option value="QUARTERLY">Quarterly</option>
+              <option value="MONTHLY">Monthly</option>
+              <option value="HALF_YEARLY">Half-Yearly</option>
+              <option value="ANNUALLY">Annually</option>
+              <option value="SIMPLE">Simple Interest</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Payout Type</label>
+            <select id="inv-payout">
+              <option value="CUMULATIVE">Cumulative</option>
+              <option value="PERIODIC_QUARTERLY">Periodic Quarterly</option>
+              <option value="PERIODIC_MONTHLY">Periodic Monthly</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Portfolio Tag</label>
+        <input type="text" id="inv-tag" placeholder="e.g. Retirement, Growth" value="DEFAULT"/>
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea id="inv-notes" rows="2" placeholder="Optional notes"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" data-close="modal-add-investment">Cancel</button>
+      <button class="btn btn-primary" id="btn-save-investment">Add Investment</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Transaction Modal -->
+<div class="modal-backdrop hidden" id="modal-add-transaction">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Record Transaction</h3>
+      <button class="modal-close" data-close="modal-add-transaction">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="add-tx-error" class="alert alert-error hidden"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Investment *</label>
+          <select id="tx-investment"></select>
+        </div>
+        <div class="form-group">
+          <label>Transaction Type *</label>
+          <select id="tx-type">
+            <option value="BUY">BUY</option>
+            <option value="SELL">SELL</option>
+            <option value="DIVIDEND">DIVIDEND</option>
+            <option value="INTEREST">INTEREST</option>
+            <option value="DEPOSIT">DEPOSIT</option>
+            <option value="WITHDRAWAL">WITHDRAWAL</option>
+            <option value="FEE">FEE</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Date *</label>
+          <input type="date" id="tx-date"/>
+        </div>
+        <div class="form-group">
+          <label>Quantity</label>
+          <input type="number" id="tx-qty" placeholder="Units" min="0" step="any"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Gross Amount (₹) *</label>
+          <input type="number" id="tx-gross" placeholder="Before fees" min="0" step="0.01"/>
+        </div>
+        <div class="form-group">
+          <label>Fees (₹)</label>
+          <input type="number" id="tx-fees" placeholder="0.00" min="0" step="0.01" value="0"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Taxes (₹)</label>
+          <input type="number" id="tx-taxes" placeholder="0.00" min="0" step="0.01" value="0"/>
+        </div>
+        <div class="form-group">
+          <label>Net Amount (₹)</label>
+          <input type="number" id="tx-net" placeholder="Auto-calculated" min="0" step="0.01"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <input type="text" id="tx-notes" placeholder="Optional description"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" data-close="modal-add-transaction">Cancel</button>
+      <button class="btn btn-primary" id="btn-save-transaction">Record Transaction</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notifications -->
+<div id="toast-container"></div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/pages.js"></script>
+<script src="js/modals.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
+
