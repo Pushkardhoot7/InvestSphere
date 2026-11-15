@@ -25,11 +25,12 @@ INSERT OR IGNORE INTO investment_types (investment_type_id, type_code, type_name
 (6, 'CASH', 'Cash & Liquid Savings', 'Liquid bank balances and emergency cash reserve');
 
 -- ----------------------------------------------------------------------------
--- 3. Sample Users (Passwords hashed using SHA-256 for demo)
+-- 3. Sample & Admin Users (PBKDF2-SHA256 hashed for security)
 -- ----------------------------------------------------------------------------
 INSERT OR IGNORE INTO users (user_id, full_name, email, password_hash, account_status) VALUES
-(1, 'Aditya Sharma', 'aditya@investsphere.local', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3', 'ACTIVE'),
-(2, 'Elena Rostova', 'elena@investsphere.local', 'b3a8e0e1f9ab1bfe3a36f231f676f78bb30a519d2b21e6c530c0eee8ebb4a5d0', 'ACTIVE');
+(1, 'Aditya Sharma', 'aditya@investsphere.local', '$pbkdf2-sha256$i=100000,l=32$e696d7adab4b8f4c2f45a88be6fba6e33e56588bc182709000b14e68ebe00c27$f7652bcc0c48eeec9c98199f617609b670a22530d480b160e4c8fc2bc0b0906a', 'ACTIVE'),
+(2, 'Elena Rostova', 'elena@investsphere.local', '$pbkdf2-sha256$i=100000,l=32$e696d7adab4b8f4c2f45a88be6fba6e33e56588bc182709000b14e68ebe00c27$f7652bcc0c48eeec9c98199f617609b670a22530d480b160e4c8fc2bc0b0906a', 'ACTIVE'),
+(3, 'Pushkar Dhoot', 'pushkardhoot2121@gmail.com', '$pbkdf2-sha256$i=100000,l=32$e696d7adab4b8f4c2f45a88be6fba6e33e56588bc182709000b14e68ebe00c27$f7652bcc0c48eeec9c98199f617609b670a22530d480b160e4c8fc2bc0b0906a', 'ACTIVE');
 
 -- ----------------------------------------------------------------------------
 -- 4. Financial Instruments Catalog (Shared 3NF Catalog)
