@@ -30,7 +30,10 @@
         <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" required/>
       </div>
       <div class="form-group">
-        <label for="login-password">Password</label>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <label for="login-password">Password</label>
+          <a href="#" id="show-reset" style="font-size:0.8rem; color:var(--primary); text-decoration:none;">Forgot Password?</a>
+        </div>
         <input type="password" id="login-password" placeholder="Your password" autocomplete="current-password" required/>
       </div>
       <button class="btn btn-primary btn-block" id="btn-login">Sign In</button>
@@ -38,6 +41,46 @@
       <p class="auth-switch demo-hint">
         <strong>Demo:</strong> Register a new account to explore the full app.
       </p>
+    </div>
+
+    <!-- Reset Password Form -->
+    <div id="reset-form" class="hidden">
+      <h2>Reset Password</h2>
+      <p class="auth-subtitle">Verify your identity and set a new password for your account.</p>
+      <div id="reset-error" class="alert alert-error hidden"></div>
+      <div id="reset-success" class="alert alert-success hidden"></div>
+
+      <div class="form-group">
+        <label for="reset-email">Email Address <span class="req">*</span></label>
+        <input type="email" id="reset-email" placeholder="you@example.com" autocomplete="email" required/>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="reset-password">New Password <span class="req">*</span></label>
+          <input type="password" id="reset-password" placeholder="Min 8 chars, letter + digit" autocomplete="new-password" required/>
+        </div>
+        <div class="form-group">
+          <label for="reset-confirm">Confirm New Password <span class="req">*</span></label>
+          <input type="password" id="reset-confirm" placeholder="Repeat password" autocomplete="new-password" required/>
+        </div>
+      </div>
+
+      <!-- Math CAPTCHA for Reset -->
+      <div class="form-group captcha-wrapper">
+        <label for="reset-captcha-answer">Security Check <span class="req">*</span></label>
+        <div class="math-captcha-box">
+          <div class="math-captcha-question">
+            <span class="captcha-icon">🔢</span>
+            <span id="reset-captcha-question-text">Loading…</span>
+            <button type="button" class="captcha-refresh" id="btn-refresh-reset-captcha" title="New question">↺</button>
+          </div>
+          <input type="number" id="reset-captcha-answer" placeholder="Your answer" autocomplete="off" required min="0" max="999"/>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="btn-reset-password">Reset Password & Sign In</button>
+      <p class="auth-switch">Remember your password? <a href="#" id="show-login-from-reset">Sign in</a></p>
     </div>
 
     <!-- Register Form -->

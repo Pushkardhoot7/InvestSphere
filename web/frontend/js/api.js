@@ -52,8 +52,14 @@ const Api = {
     try {
       const response = await fetch(url, { ...options, headers });
 
-      if (response.status === 401) {
-        // Token expired or invalid
+      const isAuthRoute = endpoint.includes('/auth/login') || 
+                          endpoint.includes('/auth/register') || 
+                          endpoint.includes('/auth/reset-password') ||
+                          endpoint.includes('/auth/config') ||
+                          endpoint.includes('/auth/captcha');
+
+      if (response.status === 401 && !isAuthRoute) {
+        // Token expired or invalid for a protected route
         this.clearSession();
         window.dispatchEvent(new CustomEvent('auth:expired'));
         throw new Error('Session expired. Please sign in again.');

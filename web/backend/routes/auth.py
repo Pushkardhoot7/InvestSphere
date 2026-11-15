@@ -275,6 +275,64 @@ def change_password():
     return success(message="Password updated successfully.")
 
 
+@auth_bp.route("/reset-password", methods=["POST"])
+def reset_password():
+    """Allow user to reset password using email + verified security challenge."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    new_pw = data.get("new_password") or ""
+    confirm_pw = data.get("confirm_password") or ""
+    captcha_challenge_id = (data.get("captcha_challenge_id") or "").strip()
+    captcha_answer = (data.get("captcha_answer") or "").strip()
+
+    if not email:
+        return error("Email address is required.")
+    if not new_pw:
+        return error("New password is required.")
+    if new_pw != confirm_pw:
+        return error("Passwords do not match.")
+
+    ok, msg = is_strong_password(new_pw)
+    if not ok:
+        return error(msg)
+
+    # Captcha verification
+    cap_ok, cap_msg = verify_math_captcha(captcha_challenge_id, captcha_answer)
+    if not cap_ok:
+        return error(cap_msg, 400)
+
+    db = get_db()
+    user = db.execute(
+        "SELECT user_id, full_name, email, account_status FROM users WHERE email = ?",
+        (email,)
+    ).fetchone()
+
+    if not user:
+        return error("No account found with this email address. Please register a new account.", 404)
+
+    if user["account_status"] in ("SUSPENDED", "CLOSED"):
+        return error("This account has been deactivated. Please contact support.", 403)
+
+    new_hash = hash_password(new_pw)
+    db.execute(
+        "UPDATE users SET password_hash = ? WHERE user_id = ?",
+        (new_hash, user["user_id"])
+    )
+    db.commit()
+
+    token = generate_token(user["user_id"], user["email"])
+    _log_audit(db, user["user_id"], "PASSWORD_RESET", "USER", user["user_id"], "Password reset via security question")
+
+    return success({
+        "token": token,
+        "user": {
+            "id": user["user_id"],
+            "full_name": user["full_name"],
+            "email": user["email"]
+        }
+    }, "Password reset successfully! You are now signed in.")
+
+
 @auth_bp.route("/profile", methods=["PUT"])
 @require_auth
 def update_profile():
