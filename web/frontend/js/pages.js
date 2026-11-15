@@ -760,18 +760,36 @@ const Pages = {
       ]);
 
       const sum = sumRes.data || {};
-      const ipos = ipoRes.data?.ipos || [];
+      const ipoPayload = ipoRes.data || {};
+      const ipos = ipoPayload.ipos || [];
+      const dataSource = ipoPayload.data_source || 'ipoalerts.in / NSE & BSE Official';
+      const lastUpdated = ipoPayload.last_updated ? new Date(ipoPayload.last_updated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Live';
+      const staleWarning = ipoPayload.stale_warning;
 
       let html = `
         <div class="page-header">
           <div>
             <h2>IPO Dashboard & Offerings</h2>
             <p class="text-muted" style="font-size:0.88rem; margin-top:2px;">
-              Track Indian Mainboard & SME Initial Public Offerings with verified subscription numbers and price bands.
+              Track Indian Mainboard & SME Initial Public Offerings with live ipoalerts data and official NSE/BSE exchange verification.
             </p>
           </div>
           <div class="topbar-actions">
-            <button class="btn btn-outline btn-sm" onclick="App.refreshCurrentPage()">↻ Refresh</button>
+            <button class="btn btn-outline btn-sm" onclick="Pages.refreshIPOData()">↻ Refresh Live</button>
+          </div>
+        </div>
+
+        <!-- Data Source & Verification Status Banner -->
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:0.6rem 0.9rem; margin-bottom:1.25rem; font-size:0.82rem;">
+          <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.5rem; color:#475569;">
+            <span>📡 Data Provider: <strong>${dataSource}</strong></span>
+            <span>•</span>
+            <span>Verification: <strong>NSE / BSE / SEBI</strong></span>
+            <span>•</span>
+            <span>Updated: <strong>${lastUpdated}</strong></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            ${staleWarning ? `<span class="badge badge-warning" style="font-size:0.75rem;" title="${staleWarning}">⚠️ ${staleWarning}</span>` : '<span class="badge badge-success" style="font-size:0.75rem;">● Live & Verified</span>'}
           </div>
         </div>
 
@@ -799,19 +817,27 @@ const Pages = {
           </div>
         </div>
 
-        <!-- Filter Pills & Search -->
+        <!-- Filter Pills, Sort & Search -->
         <div class="card">
           <div class="card-header" style="flex-wrap:wrap; gap:0.75rem;">
             <div class="pill-bar" style="margin-bottom:0;" id="ipo-filter-pills">
-              <button class="pill-btn active" onclick="Pages.filterIPOTab('ALL')">All Offerings</button>
-              <button class="pill-btn" onclick="Pages.filterIPOTab('OPEN')">Open Now 🟢</button>
-              <button class="pill-btn" onclick="Pages.filterIPOTab('UPCOMING')">Upcoming 📅</button>
-              <button class="pill-btn" onclick="Pages.filterIPOTab('LISTED')">Recently Listed 📈</button>
-              <button class="pill-btn" onclick="Pages.filterIPOTab('SME')">SME IPOs</button>
-              <button class="pill-btn" onclick="Pages.filterIPOTab('MAINBOARD')">Mainboard</button>
+              <button class="pill-btn active" data-tab="ALL" onclick="Pages.filterIPOTab('ALL')">All Offerings</button>
+              <button class="pill-btn" data-tab="OPEN" onclick="Pages.filterIPOTab('OPEN')">Open Now 🟢</button>
+              <button class="pill-btn" data-tab="UPCOMING" onclick="Pages.filterIPOTab('UPCOMING')">Upcoming 📅</button>
+              <button class="pill-btn" data-tab="LISTED" onclick="Pages.filterIPOTab('LISTED')">Recently Listed 📈</button>
+              <button class="pill-btn" data-tab="SME" onclick="Pages.filterIPOTab('SME')">SME IPOs</button>
+              <button class="pill-btn" data-tab="MAINBOARD" onclick="Pages.filterIPOTab('MAINBOARD')">Mainboard</button>
             </div>
-            <div style="flex:1; max-width:280px;">
-              <input type="text" id="ipo-search-input" placeholder="🔍 Search company or symbol…" onkeyup="Pages.searchIPOCards(this.value)"/>
+            <div style="display:flex; gap:0.5rem; align-items:center; flex:1; max-width:440px;">
+              <select id="ipo-sort-select" class="form-control" style="flex:1; padding:0.4rem 0.6rem; font-size:0.85rem;" onchange="Pages.sortIPOCards(this.value)">
+                <option value="date-desc">Sort: Latest Date 📅</option>
+                <option value="date-asc">Sort: Oldest Date</option>
+                <option value="size-desc">Sort: Issue Size (High to Low)</option>
+                <option value="size-asc">Sort: Issue Size (Low to High)</option>
+                <option value="gain-desc">Sort: Listing Gain (High to Low)</option>
+                <option value="name-asc">Sort: Company Name (A-Z)</option>
+              </select>
+              <input type="text" id="ipo-search-input" placeholder="🔍 Search company or symbol…" onkeyup="Pages.searchIPOCards(this.value)" style="flex:1.2;"/>
             </div>
           </div>
 
@@ -843,6 +869,57 @@ const Pages = {
     }
   },
 
+  async refreshIPOData() {
+    const container = document.getElementById('ipo-cards-container');
+    if (container) {
+      container.innerHTML = '<div class="spinner"></div>';
+    }
+    try {
+      const [sumRes, ipoRes] = await Promise.all([
+        Api.get('/ipo/summary').catch(() => ({ data: {} })),
+        Api.get('/ipo?refresh=true').catch(() => ({ data: { ipos: [] } }))
+      ]);
+      const mainContainer = document.getElementById('page-content') || document.querySelector('.main-content');
+      if (mainContainer) {
+        Pages.renderIPO(mainContainer);
+      }
+    } catch (err) {
+      console.error('Refresh IPO error:', err);
+    }
+  },
+
+  sortIPOCards(sortVal) {
+    if (!window._investsphere_all_ipos) return;
+    const [field, order] = sortVal.split('-');
+    const sorted = [...window._investsphere_all_ipos].sort((a, b) => {
+      let valA, valB;
+      if (field === 'date') {
+        valA = a.opening_date || a.listing_date || '';
+        valB = b.opening_date || b.listing_date || '';
+        return order === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      } else if (field === 'size') {
+        valA = a.issue_size_cr || 0;
+        valB = b.issue_size_cr || 0;
+        return order === 'asc' ? valA - valB : valB - valA;
+      } else if (field === 'gain') {
+        valA = a.listing_gain_pct || -9999;
+        valB = b.listing_gain_pct || -9999;
+        return order === 'asc' ? valA - valB : valB - valA;
+      } else if (field === 'name') {
+        valA = (a.company_name || '').toLowerCase();
+        valB = (b.company_name || '').toLowerCase();
+        return order === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+      return 0;
+    });
+    const container = document.getElementById('ipo-cards-container');
+    if (container) {
+      container.innerHTML = sorted.map(ipo => Pages.renderIPOCard(ipo)).join('');
+      const activeTab = document.querySelector('#ipo-filter-pills .pill-btn.active')?.getAttribute('data-tab') || 'ALL';
+      Pages.filterIPOTab(activeTab);
+    }
+  },
+
   renderIPOCard(ipo) {
     let statusBadge = '<span class="badge badge-neutral">Announced</span>';
     if (ipo.status === 'OPEN') {
@@ -851,6 +928,8 @@ const Pages = {
       statusBadge = '<span class="badge badge-primary">Listed on Exchange</span>';
     } else if (ipo.status === 'CLOSED') {
       statusBadge = '<span class="badge badge-warning">Closed / Allotment</span>';
+    } else if (ipo.status === 'UPCOMING') {
+      statusBadge = '<span class="badge badge-info">Upcoming</span>';
     }
 
     const typeBadge = ipo.ipo_type === 'SME' ?
@@ -859,14 +938,21 @@ const Pages = {
 
     // Listing Gain or Subscription Highlight
     let highlight = '';
-    if (ipo.status === 'LISTED' && ipo.listing_gain_pct !== null) {
+    if (ipo.status === 'LISTED' && ipo.listing_gain_pct !== null && ipo.listing_gain_pct !== undefined) {
       const isGain = ipo.listing_gain_pct >= 0;
       const sign = isGain ? '+' : '';
       const cls = isGain ? 'text-success' : 'text-danger';
-      highlight = `<div style="font-size:0.85rem; font-weight:700;" class="${cls}">Debut: ${sign}${formatNumber(ipo.listing_gain_pct)}% (${formatINR(ipo.listing_price)})</div>`;
+      const listPriceStr = ipo.listing_price ? ` (${formatINR(ipo.listing_price)})` : '';
+      highlight = `<div style="font-size:0.85rem; font-weight:700;" class="${cls}">Debut: ${sign}${formatNumber(ipo.listing_gain_pct)}%${listPriceStr}</div>`;
     } else if (ipo.subscription_status) {
       highlight = `<div style="font-size:0.85rem; font-weight:600; color:var(--primary);">${ipo.subscription_status}</div>`;
     }
+
+    const minInvStr = (ipo.min_investment && ipo.min_investment > 0) ? formatINR(ipo.min_investment) : '<span class="text-muted">Not Announced</span>';
+    const lotSizeStr = (ipo.lot_size && ipo.lot_size > 0) ? `${ipo.lot_size} Shares` : '<span class="text-muted">Not Announced</span>';
+    const issueSizeStr = (ipo.issue_size_cr && ipo.issue_size_cr > 0) ? `₹${formatNumber(ipo.issue_size_cr)} Cr` : '<span class="text-muted">Data Unavailable</span>';
+    const priceBandStr = ipo.price_band || 'Not Announced';
+    const sourceLabel = ipo.source_name || (ipo.is_live ? 'ipoalerts.in' : 'NSE/BSE Official');
 
     return `
       <div class="ipo-card" data-status="${ipo.status}" data-type="${ipo.ipo_type}" data-name="${(ipo.company_name || '').toLowerCase()}" data-symbol="${(ipo.symbol || '').toLowerCase()}">
@@ -885,19 +971,19 @@ const Pages = {
           <div class="ipo-metrics-grid">
             <div>
               <div class="ipo-metric-label">PRICE BAND</div>
-              <div class="ipo-metric-val">${ipo.price_band}</div>
+              <div class="ipo-metric-val">${priceBandStr}</div>
             </div>
             <div>
               <div class="ipo-metric-label">MIN INVESTMENT</div>
-              <div class="ipo-metric-val">${formatINR(ipo.min_investment)}</div>
+              <div class="ipo-metric-val">${minInvStr}</div>
             </div>
             <div>
               <div class="ipo-metric-label">LOT SIZE</div>
-              <div class="ipo-metric-val">${ipo.lot_size} Shares</div>
+              <div class="ipo-metric-val">${lotSizeStr}</div>
             </div>
             <div>
               <div class="ipo-metric-label">ISSUE SIZE</div>
-              <div class="ipo-metric-val">₹${formatNumber(ipo.issue_size_cr)} Cr</div>
+              <div class="ipo-metric-val">${issueSizeStr}</div>
             </div>
           </div>
 
@@ -910,7 +996,7 @@ const Pages = {
         </div>
 
         <div style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-size:0.75rem; color:var(--text-muted);">Listing: ${formatDate(ipo.listing_date)}</span>
+          <span style="font-size:0.75rem; color:var(--text-muted);" title="Verified from ${sourceLabel}">Listing: ${formatDate(ipo.listing_date)}</span>
           <button class="btn btn-outline btn-sm" onclick="Pages.openIPODetail('${ipo.id}')">View Details & Stats ↗</button>
         </div>
       </div>
@@ -919,7 +1005,12 @@ const Pages = {
 
   filterIPOTab(tab) {
     document.querySelectorAll('#ipo-filter-pills .pill-btn').forEach(btn => btn.classList.remove('active'));
-    event?.target?.classList.add('active');
+    const targetBtn = document.querySelector(`#ipo-filter-pills .pill-btn[data-tab="${tab}"]`);
+    if (targetBtn) {
+      targetBtn.classList.add('active');
+    } else if (event?.target?.classList?.contains('pill-btn')) {
+      event.target.classList.add('active');
+    }
 
     const cards = document.querySelectorAll('#ipo-cards-container .ipo-card');
     cards.forEach(card => {
@@ -970,43 +1061,53 @@ const Pages = {
       const ret = stats.retail ? `${stats.retail}x` : '—';
       const tot = stats.total ? `${stats.total}x` : (ipo.subscription_status || '—');
 
+      const freshIssueStr = (ipo.fresh_issue_cr !== null && ipo.fresh_issue_cr !== undefined) ? `₹${formatNumber(ipo.fresh_issue_cr)} Cr` : 'Data Unavailable';
+      const ofsStr = (ipo.ofs_cr !== null && ipo.ofs_cr !== undefined) ? `₹${formatNumber(ipo.ofs_cr)} Cr` : 'Data Unavailable';
+      const issueSizeStr = (ipo.issue_size_cr) ? `₹${formatNumber(ipo.issue_size_cr)} Cr` : 'Data Unavailable';
+
+      const retailQuota = (ipo.retail_quota_pct !== null && ipo.retail_quota_pct !== undefined) ? `${ipo.retail_quota_pct}%` : '—';
+      const qibQuota = (ipo.qib_quota_pct !== null && ipo.qib_quota_pct !== undefined) ? `${ipo.qib_quota_pct}%` : '—';
+      const niiQuota = (ipo.nii_quota_pct !== null && ipo.nii_quota_pct !== undefined) ? `${ipo.nii_quota_pct}%` : '—';
+
+      const sourceLink = ipo.source_url ? `<a href="${ipo.source_url}" target="_blank" rel="noopener noreferrer" style="color:var(--primary); text-decoration:underline;">${ipo.source_name || 'Official Verification Source'} ↗</a>` : (ipo.source_name || 'NSE/BSE India');
+
       body.innerHTML = `
         <div style="margin-bottom:1rem;">
-          <p style="font-size:0.92rem; color:var(--text); line-height:1.5;">${ipo.description || ''}</p>
+          <p style="font-size:0.92rem; color:var(--text); line-height:1.5;">${ipo.description || 'Verified Indian Initial Public Offering details.'}</p>
         </div>
 
         <div style="font-weight:600; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.4rem;">OFFERING SPECIFICATIONS</div>
         <div class="summary-grid" style="grid-template-columns: repeat(2, 1fr); gap:0.6rem; margin-bottom:1.25rem;">
           <div class="summary-card" style="padding:0.75rem;">
             <div class="summary-label">PRICE BAND</div>
-            <div class="summary-value" style="font-size:1.1rem;">${ipo.price_band}</div>
+            <div class="summary-value" style="font-size:1.1rem;">${ipo.price_band || 'Not Announced'}</div>
           </div>
           <div class="summary-card" style="padding:0.75rem;">
             <div class="summary-label">TOTAL ISSUE SIZE</div>
-            <div class="summary-value" style="font-size:1.1rem;">₹${formatNumber(ipo.issue_size_cr)} Cr</div>
+            <div class="summary-value" style="font-size:1.1rem;">${issueSizeStr}</div>
           </div>
           <div class="summary-card" style="padding:0.75rem;">
             <div class="summary-label">FRESH ISSUE</div>
-            <div class="summary-value" style="font-size:1rem;">₹${formatNumber(ipo.fresh_issue_cr || 0)} Cr</div>
+            <div class="summary-value" style="font-size:1rem;">${freshIssueStr}</div>
           </div>
           <div class="summary-card" style="padding:0.75rem;">
             <div class="summary-label">OFFER FOR SALE (OFS)</div>
-            <div class="summary-value" style="font-size:1rem;">₹${formatNumber(ipo.ofs_cr || 0)} Cr</div>
+            <div class="summary-value" style="font-size:1rem;">${ofsStr}</div>
           </div>
         </div>
 
         <div style="font-weight:600; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.4rem;">SUBSCRIPTION STATISTICS</div>
         <div class="summary-grid" style="grid-template-columns: repeat(4, 1fr); gap:0.5rem; margin-bottom:1.25rem;">
           <div class="summary-card" style="padding:0.6rem; text-align:center;">
-            <div class="summary-label" style="font-size:0.7rem;">QIB</div>
+            <div class="summary-label" style="font-size:0.7rem;">QIB (${qibQuota})</div>
             <div class="font-bold text-primary" style="font-size:1.05rem;">${qib}</div>
           </div>
           <div class="summary-card" style="padding:0.6rem; text-align:center;">
-            <div class="summary-label" style="font-size:0.7rem;">NII (HNI)</div>
+            <div class="summary-label" style="font-size:0.7rem;">NII (${niiQuota})</div>
             <div class="font-bold text-info" style="font-size:1.05rem;">${nii}</div>
           </div>
           <div class="summary-card" style="padding:0.6rem; text-align:center;">
-            <div class="summary-label" style="font-size:0.7rem;">RETAIL</div>
+            <div class="summary-label" style="font-size:0.7rem;">RETAIL (${retailQuota})</div>
             <div class="font-bold text-success" style="font-size:1.05rem;">${ret}</div>
           </div>
           <div class="summary-card" style="padding:0.6rem; text-align:center;">
@@ -1015,9 +1116,11 @@ const Pages = {
           </div>
         </div>
 
-        <div style="background:#f8fafc; padding:0.85rem; border-radius:8px; font-size:0.82rem; color:var(--text-muted);">
-          <div><strong>Registrar:</strong> ${ipo.registrar || '—'}</div>
-          <div style="margin-top:0.25rem;"><strong>Important Schedule:</strong> Allotment: ${formatDate(ipo.allotment_date)} • Listing: ${formatDate(ipo.listing_date)}</div>
+        <div style="background:#f8fafc; padding:0.85rem; border-radius:8px; font-size:0.82rem; color:var(--text-muted); line-height:1.6;">
+          <div><strong>Registrar:</strong> ${ipo.registrar || 'Data Unavailable'}</div>
+          <div><strong>Lead Managers:</strong> ${Array.isArray(ipo.lead_managers) ? ipo.lead_managers.join(', ') : (ipo.lead_managers || 'Data Unavailable')}</div>
+          <div><strong>Important Schedule:</strong> Open: ${formatDate(ipo.opening_date)} • Close: ${formatDate(ipo.closing_date)} • Allotment: ${formatDate(ipo.allotment_date)} • Listing: ${formatDate(ipo.listing_date)}</div>
+          <div style="margin-top:0.35rem;"><strong>Source Verification:</strong> ${sourceLink}</div>
         </div>
       `;
     } catch (err) {
