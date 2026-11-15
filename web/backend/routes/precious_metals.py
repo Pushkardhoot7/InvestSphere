@@ -16,9 +16,10 @@ precious_metals_bp = Blueprint("precious_metals", __name__)
 
 @precious_metals_bp.route("/rates", methods=["GET"])
 def get_rates():
-    """Retrieve Gold and Silver rates for selected city (default: Mumbai / Pune)."""
+    """Retrieve Gold and Silver rates for selected city (default: Mumbai / Pune) with OroPocket integration."""
     city = request.args.get("city", "pune")
-    rates = get_precious_metals_rates(city)
+    force = request.args.get("refresh", request.args.get("force", "false")).lower() in ("true", "1", "yes")
+    rates = get_precious_metals_rates(city, force_refresh=force)
     return success(rates)
 
 

@@ -1155,24 +1155,30 @@ const Pages = {
       let html = `
         <div class="page-header">
           <div>
-            <h2>Gold & Silver Rates in India (Maharashtra)</h2>
+            <h2>Gold & Silver Rates (OroPocket Live Bullion Feed)</h2>
             <p class="text-muted" style="font-size:0.88rem; margin-top:2px;">
-              Live IBJA bullion spot benchmark and retail jewellery rates across Maharashtra trade centers.
+              Live digital bullion spot rates fetched from OroPocket API with Buy/Sell quotes, 24h change, and retail jewellery billing calculator.
             </p>
           </div>
           <div style="display:flex; align-items:center; gap:0.75rem;">
-            <label for="metals-city-select" style="font-size:0.85rem; font-weight:600;">Location:</label>
+            <label for="metals-city-select" style="font-size:0.85rem; font-weight:600;">Location Context:</label>
             <select id="metals-city-select" style="width:200px;" onchange="Pages.updateMetalRatesCity(this.value)">
               ${cities.map(c => `
                 <option value="${c.key}" ${c.key === 'pune' ? 'selected' : ''}>${c.name} (${c.hub})</option>
               `).join('')}
             </select>
+            <button class="btn btn-outline btn-sm" onclick="Pages.refreshMetalRates()" title="Refresh live rates from OroPocket">↻ Live Refresh</button>
           </div>
         </div>
 
-        <div class="alert alert-info">
-          🏛️ <strong>Maharashtra Bullion Context:</strong> Rates shown for <strong id="metals-current-city">${rates.city || 'Pune'}</strong> (${rates.market_hub || 'Laxmi Road'}).
-          Bullion rates reflect wholesale spot benchmark. Retail jewellery purchases include 3% GST and making charges.
+        <div class="alert alert-info" style="border-left: 4px solid #3b82f6;">
+          📢 <strong>Indicative Rates Notice:</strong> Rates shown reflect national spot benchmark prices in <strong>INR per gram</strong> fetched from OroPocket's public bullion API.
+          <strong>These rates are indicative digital bullion prices and NOT exact local Maharashtra retail jeweller OTC prices</strong>, which vary by city sarafa association daily rates, local transport cess, custom making charges (8%–15%), and hallmarking fees.
+          <div style="font-size:0.82rem; margin-top:5px; color:var(--text-muted);">
+            Location Hub: <strong>${rates.city || 'Pune'}</strong> (${rates.market_hub || 'Laxmi Road'}) • 
+            Last Updated: <strong>${rates.last_updated ? new Date(rates.last_updated).toLocaleString('en-IN') : 'Just now'}</strong> • 
+            Data Source: <strong>${rates.data_source || 'OroPocket Public API'}</strong> • Auto-cached (5m refresh)
+          </div>
         </div>
 
         <!-- 4 Metal Rate Cards -->
@@ -1185,14 +1191,14 @@ const Pages = {
           <!-- Retail Jewellery Bill Calculator -->
           <div class="card">
             <div class="card-header">
-              <div class="card-title">💍 Retail Jewellery Cost Estimator</div>
+              <div class="card-title">💍 Retail Jewellery Cost Estimator (Live Bullion Base)</div>
             </div>
             <div class="card-body">
               <div class="form-row">
                 <div class="form-group">
                   <label>Purity Karat</label>
                   <select id="calc-gold-purity" onchange="Pages.calculateJewelleryBill()">
-                    <option value="22" selected>22K Gold (91.6% Hallmark)</option>
+                    <option value="22" selected>22K Gold (91.6% Hallmark Jewellery)</option>
                     <option value="18">18K Gold (75.0% Diamond/Stone)</option>
                     <option value="24">24K Bullion (99.9% Bar/Coin)</option>
                   </select>
@@ -1246,72 +1252,110 @@ const Pages = {
     const g18 = rates.gold_18k || {};
     const sil = rates.silver || {};
 
-    const sign24 = (g24.daily_change || 0) >= 0 ? '+' : '';
-    const sign22 = (g22.daily_change || 0) >= 0 ? '+' : '';
-    const sign18 = (g18.daily_change || 0) >= 0 ? '+' : '';
-    const signSil = (sil.daily_change || 0) >= 0 ? '+' : '';
+    const chg24 = g24.change_pct_buy || g24.daily_change_pct || 0;
+    const chg22 = g22.change_pct_buy || g22.daily_change_pct || 0;
+    const chg18 = g18.change_pct_buy || g18.daily_change_pct || 0;
+    const chgSil = sil.change_pct_buy || sil.daily_change_pct || 0;
+
+    const sign24 = chg24 >= 0 ? '+' : '';
+    const sign22 = chg22 >= 0 ? '+' : '';
+    const sign18 = chg18 >= 0 ? '+' : '';
+    const signSil = chgSil >= 0 ? '+' : '';
 
     return `
       <!-- 24K Gold -->
       <div class="metal-card gold-card-24k">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
           <strong style="color:#d97706; font-size:1.05rem;">24K Pure Gold</strong>
           <span class="badge badge-warning">99.9% Purity</span>
         </div>
-        <div style="font-size:1.6rem; font-weight:700; color:var(--text);">${formatINR(g24.per_10_gram)} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">/ 10g</span></div>
-        <div class="${(g24.daily_change || 0) >= 0 ? 'text-success' : 'text-danger'} font-bold" style="font-size:0.85rem; margin-bottom:0.75rem;">
-          ${sign24}${formatINR(g24.daily_change)} (${sign24}${formatNumber(g24.daily_change_pct)}%) today
+        <div style="font-size:1.6rem; font-weight:700; color:var(--text);">${formatINR(g24.buy_price_per_gram || g24.per_gram)} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">/ gram</span></div>
+        <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:0.3rem;">
+          Sell Rate: <strong>${formatINR(g24.sell_price_per_gram || (g24.per_gram * 0.965))}</strong> / g
         </div>
-        <div class="metal-rate-row"><span>Per 1 Gram:</span> <strong>${formatINR(g24.per_gram)}</strong></div>
-        <div class="metal-rate-row"><span>Per 100 Grams:</span> <strong>${formatINR((g24.per_10_gram || 0) * 10)}</strong></div>
+        <div class="${chg24 >= 0 ? 'text-success' : 'text-danger'} font-bold" style="font-size:0.85rem; margin-bottom:0.75rem;">
+          ${sign24}${formatNumber(chg24)}% 24h change
+        </div>
+        <div class="metal-rate-row"><span>Per 10 Grams:</span> <strong>${formatINR(g24.per_10_gram)}</strong></div>
         <div class="metal-rate-row"><span>Per 1 Kilogram:</span> <strong>${formatINR(g24.per_kg)}</strong></div>
+        <div class="metal-rate-row"><span>Indicative Spread:</span> <strong>${formatINR(g24.spread_per_gram || 489.11)}/g</strong></div>
+        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.4rem; text-align:right;">Indicative OroPocket Spot Rate</div>
       </div>
 
       <!-- 22K Gold -->
       <div class="metal-card gold-card-22k">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
           <strong style="color:#b45309; font-size:1.05rem;">22K Jewellery Gold</strong>
           <span class="badge badge-warning">91.6% Hallmark</span>
         </div>
-        <div style="font-size:1.6rem; font-weight:700; color:var(--text);">${formatINR(g22.per_10_gram)} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">/ 10g</span></div>
-        <div class="${(g22.daily_change || 0) >= 0 ? 'text-success' : 'text-danger'} font-bold" style="font-size:0.85rem; margin-bottom:0.75rem;">
-          ${sign22}${formatINR(g22.daily_change)} (${sign22}${formatNumber(g22.daily_change_pct)}%) today
+        <div style="font-size:1.6rem; font-weight:700; color:var(--text);">${formatINR(g22.buy_price_per_gram || g22.per_gram)} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">/ gram</span></div>
+        <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:0.3rem;">
+          Sell Rate: <strong>${formatINR(g22.sell_price_per_gram || (g22.per_gram * 0.965))}</strong> / g
         </div>
-        <div class="metal-rate-row"><span>Per 1 Gram:</span> <strong>${formatINR(g22.per_gram)}</strong></div>
+        <div class="${chg22 >= 0 ? 'text-success' : 'text-danger'} font-bold" style="font-size:0.85rem; margin-bottom:0.75rem;">
+          ${sign22}${formatNumber(chg22)}% 24h change
+        </div>
         <div class="metal-rate-row"><span>Per 8g (1 Pavan):</span> <strong>${formatINR((g22.per_gram || 0) * 8)}</strong></div>
-        <div class="metal-rate-row"><span>Per 100 Grams:</span> <strong>${formatINR((g22.per_10_gram || 0) * 10)}</strong></div>
+        <div class="metal-rate-row"><span>Per 10 Grams:</span> <strong>${formatINR(g22.per_10_gram)}</strong></div>
+        <div class="metal-rate-row"><span>Purity Ratio:</span> <strong>91.67% of 24K</strong></div>
+        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.4rem; text-align:right;">Indicative Jewellery Benchmark</div>
       </div>
 
       <!-- 18K Gold -->
       <div class="metal-card gold-card-18k">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
           <strong style="color:#854d0e; font-size:1.05rem;">18K Diamond Gold</strong>
           <span class="badge badge-neutral">75.0% Purity</span>
         </div>
-        <div style="font-size:1.6rem; font-weight:700; color:var(--text);">${formatINR(g18.per_10_gram)} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">/ 10g</span></div>
-        <div class="${(g18.daily_change || 0) >= 0 ? 'text-success' : 'text-danger'} font-bold" style="font-size:0.85rem; margin-bottom:0.75rem;">
-          ${sign18}${formatINR(g18.daily_change)} (${sign18}${formatNumber(g18.daily_change_pct)}%) today
+        <div style="font-size:1.6rem; font-weight:700; color:var(--text);">${formatINR(g18.buy_price_per_gram || g18.per_gram)} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">/ gram</span></div>
+        <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:0.3rem;">
+          Sell Rate: <strong>${formatINR(g18.sell_price_per_gram || (g18.per_gram * 0.965))}</strong> / g
         </div>
-        <div class="metal-rate-row"><span>Per 1 Gram:</span> <strong>${formatINR(g18.per_gram)}</strong></div>
+        <div class="${chg18 >= 0 ? 'text-success' : 'text-danger'} font-bold" style="font-size:0.85rem; margin-bottom:0.75rem;">
+          ${sign18}${formatNumber(chg18)}% 24h change
+        </div>
         <div class="metal-rate-row"><span>Per 10 Grams:</span> <strong>${formatINR(g18.per_10_gram)}</strong></div>
         <div class="metal-rate-row"><span>Common Use:</span> <strong>Diamond Studded</strong></div>
+        <div class="metal-rate-row"><span>Purity Ratio:</span> <strong>75.00% of 24K</strong></div>
+        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.4rem; text-align:right;">Indicative Hallmark Benchmark</div>
       </div>
 
       <!-- Fine Silver -->
       <div class="metal-card silver-card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
           <strong style="color:#475569; font-size:1.05rem;">Fine Silver</strong>
           <span class="badge badge-info">99.9% Pure</span>
         </div>
-        <div style="font-size:1.6rem; font-weight:700; color:var(--text);">${formatINR(sil.per_kg)} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">/ 1 kg</span></div>
-        <div class="${(sil.daily_change || 0) >= 0 ? 'text-success' : 'text-danger'} font-bold" style="font-size:0.85rem; margin-bottom:0.75rem;">
-          ${signSil}${formatINR(sil.daily_change)} (${signSil}${formatNumber(sil.daily_change_pct)}%) today
+        <div style="font-size:1.6rem; font-weight:700; color:var(--text);">${formatINR(sil.buy_price_per_gram || sil.per_gram)} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">/ gram</span></div>
+        <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:0.3rem;">
+          Sell Rate: <strong>${formatINR(sil.sell_price_per_gram || (sil.per_gram * 0.944))}</strong> / g
         </div>
-        <div class="metal-rate-row"><span>Per 1 Gram:</span> <strong>${formatINR(sil.per_gram)}</strong></div>
+        <div class="${chgSil >= 0 ? 'text-success' : 'text-danger'} font-bold" style="font-size:0.85rem; margin-bottom:0.75rem;">
+          ${signSil}${formatNumber(chgSil)}% 24h change
+        </div>
         <div class="metal-rate-row"><span>Per 10 Grams:</span> <strong>${formatINR(sil.per_10_gram)}</strong></div>
-        <div class="metal-rate-row"><span>Per 100 Grams:</span> <strong>${formatINR((sil.per_gram || 0) * 100)}</strong></div>
+        <div class="metal-rate-row"><span>Per 1 Kilogram:</span> <strong>${formatINR(sil.per_kg)}</strong></div>
+        <div class="metal-rate-row"><span>Indicative Spread:</span> <strong>${formatINR(sil.spread_per_gram || 10.39)}/g</strong></div>
+        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.4rem; text-align:right;">Indicative OroPocket Spot Rate</div>
       </div>
     `;
+  },
+
+  async refreshMetalRates() {
+    const cityKey = document.getElementById('metals-city-select')?.value || 'pune';
+    const cardsContainer = document.getElementById('metal-rate-cards');
+    if (cardsContainer) cardsContainer.innerHTML = '<div class="spinner"></div>';
+    try {
+      const res = await Api.get(`/precious-metals/rates?city=${cityKey}&refresh=1`);
+      const rates = res.data || {};
+      if (cardsContainer) cardsContainer.innerHTML = Pages.renderPreciousMetalsCards(rates);
+      Pages.calculateJewelleryBill();
+      if (typeof showToast === 'function') {
+        showToast('Precious metals rates refreshed from OroPocket.', 'success');
+      }
+    } catch (err) {
+      if (cardsContainer) cardsContainer.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
   },
 
   async updateMetalRatesCity(cityKey) {
