@@ -27,6 +27,33 @@ const Modals = {
     this.bindEvents();
     this.setupInvestmentCategoryChange();
     this.setupAutoCalculations();
+    this.setupStockAutocomplete();
+  },
+
+  openAddInvestmentForStock(symbol, name, price) {
+    this.open('modal-add-investment');
+    const catSelect = document.getElementById('inv-category');
+    if (catSelect) catSelect.value = 'STOCK';
+    document.getElementById('inv-stock-search-group')?.classList.remove('hidden');
+    document.getElementById('fd-fields')?.classList.add('hidden');
+    document.getElementById('inv-qty-group')?.classList.remove('hidden');
+    document.getElementById('inv-price-row')?.classList.remove('hidden');
+
+    document.getElementById('inv-symbol').value = symbol || '';
+    document.getElementById('inv-name').value = name || symbol || '';
+    if (price && price > 0) {
+      document.getElementById('inv-price').value = price;
+    }
+    const searchInput = document.getElementById('inv-stock-search');
+    if (searchInput) searchInput.value = `${symbol} — ${name}`;
+
+    const today = new Date().toISOString().split('T')[0];
+    const dateInput = document.getElementById('inv-date');
+    if (dateInput && !dateInput.value) dateInput.value = today;
+
+    setTimeout(() => {
+      document.getElementById('inv-qty')?.focus();
+    }, 150);
   },
 
   open(modalId) {
@@ -103,9 +130,15 @@ const Modals = {
     catSelect.addEventListener('change', () => {
       const cat = catSelect.value;
       const isFD = cat === 'FIXED_DEPOSIT';
+      const isStock = cat === 'STOCK';
       const fdFields = document.getElementById('fd-fields');
       const qtyGroup = document.getElementById('inv-qty-group');
       const priceRow = document.getElementById('inv-price-row');
+      const stockSearchGroup = document.getElementById('inv-stock-search-group');
+
+      if (stockSearchGroup) {
+        stockSearchGroup.classList.toggle('hidden', !isStock);
+      }
 
       if (isFD) {
         fdFields?.classList.remove('hidden');
@@ -115,6 +148,95 @@ const Modals = {
         fdFields?.classList.add('hidden');
         qtyGroup?.classList.remove('hidden');
         priceRow?.classList.remove('hidden');
+      }
+
+      // Auto-fill defaults for gold
+      if (cat === 'GOLD') {
+        const symEl = document.getElementById('inv-symbol');
+        const nameEl = document.getElementById('inv-name');
+        if (symEl && !symEl.value) symEl.value = 'GOLD-24K';
+        if (nameEl && !nameEl.value) nameEl.value = '24K Fine Gold (per gram)';
+      }
+    });
+  },
+
+  setupStockAutocomplete() {
+    const searchInput = document.getElementById('inv-stock-search');
+    const suggBox = document.getElementById('inv-stock-suggestions');
+    if (!searchInput || !suggBox) return;
+
+    let debounceTimer = null;
+
+    searchInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      const q = searchInput.value.trim();
+      if (q.length < 1) {
+        suggBox.classList.add('hidden');
+        suggBox.innerHTML = '';
+        return;
+      }
+
+      debounceTimer = setTimeout(async () => {
+        try {
+          const res = await Api.get(`/market/search?q=${encodeURIComponent(q)}`);
+          const matches = res.data || [];
+          if (matches.length === 0) {
+            suggBox.innerHTML = `<div style="padding:0.6rem 0.8rem; font-size:0.85rem; color:#64748b;">No stocks found for "${q}"</div>`;
+            suggBox.classList.remove('hidden');
+            return;
+          }
+
+          suggBox.innerHTML = matches.slice(0, 8).map(st => `
+            <div class="stock-sugg-item" style="padding:0.6rem 0.8rem; cursor:pointer; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center;"
+                 data-sym="${st.display_symbol || st.symbol}"
+                 data-name="${st.name}"
+                 data-price="${st.price || 0}">
+              <div>
+                <strong style="color:var(--text);">${st.display_symbol || st.symbol}</strong>
+                <span style="font-size:0.8rem; color:#64748b; margin-left:0.4rem;">${st.name}</span>
+                <span style="font-size:0.75rem; background:#f1f5f9; padding:2px 6px; border-radius:4px; margin-left:0.3rem;">${st.exchange || 'NSE'}</span>
+              </div>
+              <div style="font-weight:600; color:var(--primary); font-size:0.9rem;">
+                ₹${Number(st.price || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              </div>
+            </div>
+          `).join('');
+
+          suggBox.querySelectorAll('.stock-sugg-item').forEach(item => {
+            item.addEventListener('mouseenter', () => item.style.background = '#f8fafc');
+            item.addEventListener('mouseleave', () => item.style.background = '#ffffff');
+            item.addEventListener('click', () => {
+              const sym = item.getAttribute('data-sym');
+              const name = item.getAttribute('data-name');
+              const price = parseFloat(item.getAttribute('data-price') || 0);
+
+              document.getElementById('inv-symbol').value = sym;
+              document.getElementById('inv-name').value = name;
+              if (price > 0) {
+                document.getElementById('inv-price').value = price;
+              }
+              const today = new Date().toISOString().split('T')[0];
+              const dateInput = document.getElementById('inv-date');
+              if (dateInput && !dateInput.value) dateInput.value = today;
+
+              searchInput.value = `${sym} — ${name}`;
+              suggBox.classList.add('hidden');
+
+              // Focus quantity input for user convenience
+              document.getElementById('inv-qty')?.focus();
+            });
+          });
+
+          suggBox.classList.remove('hidden');
+        } catch (e) {
+          console.warn('Stock search error:', e);
+        }
+      }, 200);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!searchInput.contains(e.target) && !suggBox.contains(e.target)) {
+        suggBox.classList.add('hidden');
       }
     });
   },
@@ -258,7 +380,7 @@ const Modals = {
 
     try {
       const res = await Api.post('/investments', payload);
-      if (res.status === 'ok') {
+      if (res.success || res.status === 'ok') {
         showToast(`Investment added: ${name}`, 'success');
         this.close('modal-add-investment');
         // Reset form
@@ -268,6 +390,8 @@ const Modals = {
         document.getElementById('inv-price').value = '';
         document.getElementById('inv-total').value = '';
         document.getElementById('inv-notes').value = '';
+        const searchInput = document.getElementById('inv-stock-search');
+        if (searchInput) searchInput.value = '';
         if (category === 'FIXED_DEPOSIT') {
           document.getElementById('inv-institution').value = '';
           document.getElementById('inv-principal').value = '';
@@ -334,7 +458,7 @@ const Modals = {
         notes
       });
 
-      if (res.status === 'ok') {
+      if (res.success || res.status === 'ok') {
         showToast('Transaction recorded successfully', 'success');
         this.close('modal-add-transaction');
         // Reset form

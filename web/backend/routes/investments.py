@@ -92,7 +92,7 @@ def list_investments():
         }
 
         # Valuation
-        val = _get_valuation(db, inv["asset_type_code"], inv_id, inst_id, qty, cost)
+        val = _get_valuation(db, inv["asset_type_code"], inv_id, inst_id, qty, cost, symbol=inv["symbol"])
         item.update(val)
         if not item.get("current_value"):
             item["current_value"] = item["total_invested"]
@@ -169,7 +169,7 @@ def get_investment(inv_id):
         if bd:
             detail["bond_details"] = dict(bd)
 
-    detail.update(_get_valuation(db, cat, inv_id, inv["instrument_id"], qty, cost))
+    detail.update(_get_valuation(db, cat, inv_id, inv["instrument_id"], qty, cost, symbol=inv["symbol"]))
     return success(detail)
 
 
@@ -428,17 +428,51 @@ def _compute_cost_basis_full(txs):
     return round(qty, 6), max(0, cost)
 
 
-def _get_valuation(db, cat, inv_id, inst_id, qty, cost):
+def _get_valuation(db, cat, inv_id, inst_id, qty, cost, symbol=""):
     result = {
         "has_market_price": False,
         "latest_price_cents": 0,
+        "latest_price": 0.0,
         "has_current_value": False,
-        "current_value_cents": 0,
+        "current_value_cents": cost,
+        "current_value": round(cost / 100, 2),
         "has_pnl": False,
         "unrealized_pnl_cents": 0,
+        "unrealized_gain_loss": 0.0,
         "unrealized_pnl_percent": 0.0,
+        "day_change": 0.0,
+        "day_change_pct": 0.0,
     }
-    if cat in ("STOCK", "GOLD"):
+    if cat == "STOCK":
+        # 1. Real-time market valuation via live quote
+        if symbol:
+            try:
+                from services.market_data_service import get_stock_quote
+                quote = get_stock_quote(symbol)
+                if quote and quote.get("price") and quote["price"] > 0:
+                    live_p = float(quote["price"])
+                    price_cents = int(round(live_p * 100))
+                    cur_val = int(round(qty * price_cents))
+                    result["has_market_price"] = True
+                    result["latest_price_cents"] = price_cents
+                    result["latest_price"] = round(live_p, 2)
+                    result["has_current_value"] = True
+                    result["current_value_cents"] = cur_val
+                    result["current_value"] = round(cur_val / 100, 2)
+                    result["has_pnl"] = True
+                    result["unrealized_pnl_cents"] = cur_val - cost
+                    result["unrealized_gain_loss"] = round((cur_val - cost) / 100, 2)
+                    result["unrealized_pnl_percent"] = (
+                        round(((cur_val - cost) / cost * 100), 2) if cost > 0 else 0.0
+                    )
+                    result["day_change"] = quote.get("change", 0.0)
+                    result["day_change_pct"] = quote.get("change_percent", 0.0)
+                    result["live_source"] = quote.get("data_source", "Yahoo Finance")
+                    return result
+            except Exception:
+                pass
+
+        # Fallback to market_prices table
         price_row = db.execute(
             "SELECT price FROM market_prices WHERE instrument_id=? ORDER BY observation_timestamp DESC LIMIT 1",
             (inst_id,)
@@ -448,12 +482,58 @@ def _get_valuation(db, cat, inv_id, inst_id, qty, cost):
             cur_val = int(round(qty * price))
             result["has_market_price"] = True
             result["latest_price_cents"] = price
+            result["latest_price"] = round(price / 100, 2)
             result["has_current_value"] = True
             result["current_value_cents"] = cur_val
+            result["current_value"] = round(cur_val / 100, 2)
             result["has_pnl"] = True
             result["unrealized_pnl_cents"] = cur_val - cost
+            result["unrealized_gain_loss"] = round((cur_val - cost) / 100, 2)
             result["unrealized_pnl_percent"] = (
-                ((cur_val - cost) / cost * 100) if cost > 0 else 0.0
+                round(((cur_val - cost) / cost * 100), 2) if cost > 0 else 0.0
+            )
+
+    elif cat == "GOLD":
+        try:
+            from services.precious_metals_service import get_oropocket_rates
+            rates = get_oropocket_rates()
+            gold_p = rates.get("gold", {}).get("sell_inr_per_gram", 0)
+            if gold_p > 0 and qty > 0:
+                cur_val = int(round(qty * gold_p * 100))
+                result["has_market_price"] = True
+                result["latest_price_cents"] = int(round(gold_p * 100))
+                result["latest_price"] = round(gold_p, 2)
+                result["has_current_value"] = True
+                result["current_value_cents"] = cur_val
+                result["current_value"] = round(cur_val / 100, 2)
+                result["has_pnl"] = True
+                result["unrealized_pnl_cents"] = cur_val - cost
+                result["unrealized_gain_loss"] = round((cur_val - cost) / 100, 2)
+                result["unrealized_pnl_percent"] = (
+                    round(((cur_val - cost) / cost * 100), 2) if cost > 0 else 0.0
+                )
+                return result
+        except Exception:
+            pass
+
+        price_row = db.execute(
+            "SELECT price FROM market_prices WHERE instrument_id=? ORDER BY observation_timestamp DESC LIMIT 1",
+            (inst_id,)
+        ).fetchone()
+        if price_row and price_row[0] > 0 and qty > 0:
+            price = price_row[0]
+            cur_val = int(round(qty * price))
+            result["has_market_price"] = True
+            result["latest_price_cents"] = price
+            result["latest_price"] = round(price / 100, 2)
+            result["has_current_value"] = True
+            result["current_value_cents"] = cur_val
+            result["current_value"] = round(cur_val / 100, 2)
+            result["has_pnl"] = True
+            result["unrealized_pnl_cents"] = cur_val - cost
+            result["unrealized_gain_loss"] = round((cur_val - cost) / 100, 2)
+            result["unrealized_pnl_percent"] = (
+                round(((cur_val - cost) / cost * 100), 2) if cost > 0 else 0.0
             )
     elif cat == "MUTUAL_FUND":
         nav_row = db.execute(

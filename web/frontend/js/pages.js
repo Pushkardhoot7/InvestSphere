@@ -214,12 +214,69 @@ const Pages = {
       const res = await Api.get('/investments');
       const list = res.data || [];
 
+      // Calculate Real-time Portfolio Totals
+      let totalInvested = 0;
+      let totalCurrentValue = 0;
+      let totalDayGain = 0;
+
+      list.forEach(inv => {
+        const cost = inv.total_invested || inv.principal_amount || 0;
+        const val = (inv.current_value !== null && inv.current_value !== undefined) ? inv.current_value : cost;
+        totalInvested += cost;
+        totalCurrentValue += val;
+        if (inv.day_change && inv.quantity) {
+          totalDayGain += (inv.day_change * inv.quantity);
+        }
+      });
+
+      const overallPnl = totalCurrentValue - totalInvested;
+      const overallPnlPct = totalInvested > 0 ? (overallPnl / totalInvested) * 100 : 0;
+      const dayGainPct = totalCurrentValue > 0 ? (totalDayGain / totalCurrentValue) * 100 : 0;
+
       let html = `
         <div class="page-header">
-          <h2>Investment Portfolio</h2>
+          <div>
+            <h2>Investment Portfolio</h2>
+            <p class="text-muted" style="font-size:0.88rem; margin-top:2px;">
+              Live holdings with real-time market prices, average purchase cost, and overall profit & loss.
+            </p>
+          </div>
           <div class="topbar-actions">
+            <button class="btn btn-outline btn-sm" onclick="App.refreshCurrentPage()">↻ Refresh Live</button>
             <button class="btn btn-outline btn-sm" onclick="Modals.open('modal-add-transaction')">+ Record Transaction</button>
             <button class="btn btn-primary btn-sm" onclick="Modals.open('modal-add-investment')">+ Add Investment</button>
+          </div>
+        </div>
+
+        <!-- Overall Portfolio Performance Summary Cards -->
+        <div class="summary-grid" style="grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="summary-card card-primary">
+            <div class="summary-label">PORTFOLIO LIVE VALUE</div>
+            <div class="summary-value font-bold" style="font-size:1.45rem;">${formatINR(totalCurrentValue)}</div>
+            <div class="summary-sub text-muted">${list.length} Total Holdings</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">TOTAL INVESTED (COST)</div>
+            <div class="summary-value" style="font-size:1.45rem;">${formatINR(totalInvested)}</div>
+            <div class="summary-sub text-muted">Net acquisition capital</div>
+          </div>
+          <div class="summary-card ${overallPnl >= 0 ? 'card-success' : 'card-danger'}">
+            <div class="summary-label">TOTAL PROFIT / LOSS</div>
+            <div class="summary-value ${overallPnl >= 0 ? 'text-success' : 'text-danger'} font-bold" style="font-size:1.45rem;">
+              ${overallPnl >= 0 ? '+' : ''}${formatINR(overallPnl)}
+            </div>
+            <div class="summary-sub ${overallPnl >= 0 ? 'text-success' : 'text-danger'} font-bold">
+              ${overallPnl >= 0 ? '▲' : '▼'} ${overallPnl >= 0 ? '+' : ''}${formatNumber(overallPnlPct)}% Total Return
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">TODAY'S RETURN (DAY GAIN)</div>
+            <div class="summary-value ${totalDayGain >= 0 ? 'text-success' : 'text-danger'}" style="font-size:1.45rem;">
+              ${totalDayGain >= 0 ? '+' : ''}${formatINR(totalDayGain)}
+            </div>
+            <div class="summary-sub text-muted">
+              ${totalDayGain >= 0 ? '+' : ''}${formatNumber(dayGainPct)}% vs Prev Close
+            </div>
           </div>
         </div>
 
@@ -255,9 +312,11 @@ const Pages = {
                   <thead>
                     <tr>
                       <th>Category</th>
-                      <th>Symbol / Scheme</th>
+                      <th>Symbol</th>
                       <th>Name</th>
                       <th>Quantity</th>
+                      <th>Avg Buy Price (₹)</th>
+                      <th>Live Market Price (₹)</th>
                       <th>Cost Basis (₹)</th>
                       <th>Current Value (₹)</th>
                       <th>Gain / Loss</th>
@@ -268,25 +327,39 @@ const Pages = {
                   <tbody>
                     ${list.map(inv => {
                       const cost = inv.total_invested || inv.principal_amount || 0;
-                      const val = inv.current_value !== null && inv.current_value !== undefined ? inv.current_value : cost;
+                      const val = (inv.current_value !== null && inv.current_value !== undefined) ? inv.current_value : cost;
                       const gl = inv.unrealized_gain_loss !== undefined ? inv.unrealized_gain_loss : (val - cost);
                       const glPct = cost > 0 ? (gl / cost) * 100 : 0;
                       const glClass = gl >= 0 ? 'text-success' : 'text-danger';
                       const glSign = gl >= 0 ? '+' : '';
+                      const qty = inv.quantity || 0;
+                      const avgBuyPrice = qty > 0 ? (cost / qty) : 0;
+                      const livePrice = inv.latest_price || (qty > 0 ? (val / qty) : avgBuyPrice);
+                      const dayChange = inv.day_change || 0;
+                      const dayChangePct = inv.day_change_pct || 0;
 
                       return `
-                        <tr data-cat="${inv.type_code}" data-status="${inv.status}" data-search="${(inv.name + ' ' + (inv.symbol || '')).toLowerCase()}">
+                        <tr data-cat="${inv.type_code}" data-status="${inv.status}" data-search="${((inv.name || '') + ' ' + (inv.symbol || '')).toLowerCase()}">
                           <td>${getCategoryBadge(inv.type_code)}</td>
                           <td><strong>${inv.symbol || '—'}</strong></td>
-                          <td>${inv.name}</td>
+                          <td>${inv.name || '—'}</td>
                           <td>${inv.quantity ? formatNumber(inv.quantity, 4) : '—'}</td>
+                          <td>${avgBuyPrice > 0 ? formatINR(avgBuyPrice) : '—'}</td>
+                          <td class="font-bold">
+                            ${livePrice > 0 ? formatINR(livePrice) : '—'}
+                            ${dayChange ? `<br><small class="${dayChange >= 0 ? 'text-success' : 'text-danger'}" style="font-weight:normal;">${dayChange >= 0 ? '+' : ''}${formatINR(dayChange)} (${dayChange >= 0 ? '+' : ''}${formatNumber(dayChangePct)}%)</small>` : ''}
+                          </td>
                           <td>${formatINR(cost)}</td>
                           <td class="font-bold">${formatINR(val)}</td>
-                          <td class="${glClass} font-bold">${glSign}${formatINR(gl)} <br><small>(${glSign}${formatNumber(glPct)}%)</small></td>
+                          <td class="${glClass} font-bold">
+                            ${glSign}${formatINR(gl)} <br><small>(${glSign}${formatNumber(glPct)}%)</small>
+                          </td>
                           <td><span class="badge ${inv.status === 'ACTIVE' ? 'badge-success' : 'badge-neutral'}">${inv.status}</span></td>
                           <td>
-                            <button class="btn btn-outline btn-sm" onclick="Pages.recordTxForInv(${inv.investment_id})" title="Record Transaction">Tx</button>
-                            <button class="btn btn-outline btn-sm text-danger" onclick="Pages.deleteInvestment(${inv.investment_id}, '${inv.name.replace(/'/g, "\\'")}')" title="Delete">✕</button>
+                            <div style="display:flex; gap:0.3rem;">
+                              <button class="btn btn-outline btn-sm" onclick="Pages.recordTxForInv(${inv.investment_id})" title="Record Transaction">+ Tx</button>
+                              <button class="btn btn-outline btn-sm text-danger" onclick="Pages.deleteInvestment(${inv.investment_id}, '${(inv.name || '').replace(/'/g, "\\'")}')" title="Delete">✕</button>
+                            </div>
                           </td>
                         </tr>
                       `;
@@ -338,7 +411,7 @@ const Pages = {
     }
     try {
       const res = await Api.delete(`/investments/${invId}`);
-      if (res.status === 'ok') {
+      if (res.success || res.status === 'ok') {
         showToast(`Investment deleted: ${name}`, 'success');
         App.refreshCurrentPage();
       } else {
@@ -424,7 +497,7 @@ const Pages = {
     if (!confirm('Are you sure you want to delete this transaction?')) return;
     try {
       const res = await Api.delete(`/transactions/${txId}`);
-      if (res.status === 'ok') {
+      if (res.success || res.status === 'ok') {
         showToast('Transaction deleted', 'success');
         App.refreshCurrentPage();
       } else {
@@ -564,8 +637,9 @@ const Pages = {
         <td style="font-size:0.8rem;"><span class="badge badge-info">${q.data_source || 'Yahoo Finance'}</span></td>
         <td>
           <div style="display:flex; gap:0.4rem;">
+            <button class="btn btn-primary btn-sm" title="Buy and Add to Portfolio" onclick="Modals.openAddInvestmentForStock('${q.symbol}', '${(q.name || q.symbol).replace(/'/g, "\\'")}', ${q.price || 0})">+ Buy</button>
             <button class="btn btn-outline btn-sm" onclick="Pages.openStockChart('${q.symbol}')">📈 Chart</button>
-            <button class="btn btn-outline btn-sm" title="Add to Watchlist" onclick="Pages.addToWatchlist('${q.symbol}', '${q.name || q.symbol}')">★</button>
+            <button class="btn btn-outline btn-sm" title="Add to Watchlist" onclick="Pages.addToWatchlist('${q.symbol}', '${(q.name || q.symbol).replace(/'/g, "\\'")}')">★</button>
           </div>
         </td>
       </tr>

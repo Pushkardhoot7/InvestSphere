@@ -285,6 +285,17 @@
           <option value="BOND">📜 Bond / Debenture</option>
         </select>
       </div>
+
+      <!-- Quick Stock Search & Auto-detect -->
+      <div class="form-group" id="inv-stock-search-group" style="position:relative;">
+        <label style="display:flex; justify-content:space-between; align-items:center;">
+          <span>🔍 Quick Stock Auto-Detect</span>
+          <span style="font-size:0.75rem; color:var(--primary); font-weight:normal;">Auto-fills name, symbol & live price</span>
+        </label>
+        <input type="text" id="inv-stock-search" placeholder="Type stock name or ticker (e.g. Reliance, TCS, Eicher, Tata Motors, HDFC)..." autocomplete="off"/>
+        <div id="inv-stock-suggestions" class="hidden" style="position:absolute; top:100%; left:0; right:0; max-height:220px; overflow-y:auto; background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 10px 20px rgba(0,0,0,0.15); z-index:1050;"></div>
+      </div>
+
       <div class="form-row">
         <div class="form-group">
           <label>Symbol / Scheme Code *</label>
