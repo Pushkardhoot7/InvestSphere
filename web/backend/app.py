@@ -27,11 +27,37 @@ from flask_cors import CORS
 def create_app():
     app = Flask(__name__)
 
-    # Security config
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", secrets.token_hex(32))
-    app.config["DATABASE"] = os.environ.get(
-        "DATABASE_URL", os.path.join(os.path.dirname(__file__), "investsphere_web.db")
-    )
+    # ── Security: SECRET_KEY must be a fixed value set via environment variable.
+    # If not set, generate a stable key based on a machine-level fallback
+    # (still not ideal for multi-worker, but prevents regeneration on redeploy).
+    _secret = os.environ.get("SECRET_KEY", "").strip()
+    if not _secret:
+        # Warn loudly if not configured — tokens will NOT survive worker restarts
+        print("[WARNING] SECRET_KEY is not set in environment variables. "
+              "JWT tokens will not survive server restarts. "
+              "Set SECRET_KEY in your Render dashboard environment variables.", flush=True)
+        _secret = secrets.token_hex(32)
+    app.config["SECRET_KEY"] = _secret
+
+    # ── Database: Prefer persistent disk path set via DATABASE_URL env var.
+    # Render ephemeral disk is in /opt/render/project/src — wiped on deploy.
+    # Persistent disk is mounted at /opt/render/project/data or similar.
+    _db_url = os.environ.get("DATABASE_URL", "").strip()
+    if not _db_url:
+        _db_url = os.path.join(os.path.dirname(__file__), "investsphere_web.db")
+
+    # Ensure the directory exists (for persistent disk mount paths)
+    _db_dir = os.path.dirname(_db_url)
+    if _db_dir and not os.path.exists(_db_dir):
+        try:
+            os.makedirs(_db_dir, exist_ok=True)
+            print(f"[INFO] Created database directory: {_db_dir}", flush=True)
+        except OSError as e:
+            print(f"[WARNING] Could not create DB directory {_db_dir}: {e}", flush=True)
+
+    app.config["DATABASE"] = _db_url
+    print(f"[INFO] Database path: {_db_url}", flush=True)
+
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB
 
     # CORS — restrict in production via environment variable

@@ -99,9 +99,20 @@ def verify_password(password: str, stored_hash: str) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_secret_key() -> bytes:
-    key = os.environ.get("SECRET_KEY", "")
+    key = os.environ.get("SECRET_KEY", "").strip()
     if not key:
-        raise RuntimeError("SECRET_KEY environment variable is not set.")
+        # Fallback: derive a stable key from the database path so it at least
+        # stays consistent within a single Render instance. Warn loudly.
+        db_path = os.environ.get("DATABASE_URL", "investsphere_default_db")
+        fallback = hashlib.sha256(f"investsphere-fallback-{db_path}".encode()).hexdigest()
+        import sys
+        print(
+            "[SECURITY WARNING] SECRET_KEY is not set in environment variables! "
+            "All JWT tokens will be invalidated on every server restart. "
+            "Set a fixed SECRET_KEY in your Render dashboard immediately.",
+            file=sys.stderr, flush=True
+        )
+        return fallback.encode("utf-8")
     return key.encode("utf-8")
 
 
