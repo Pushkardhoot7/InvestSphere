@@ -895,6 +895,7 @@ const Pages = {
               <button class="pill-btn" data-tab="OPEN" onclick="Pages.filterIPOTab('OPEN')">Open Now 🟢</button>
               <button class="pill-btn" data-tab="UPCOMING" onclick="Pages.filterIPOTab('UPCOMING')">Upcoming 📅</button>
               <button class="pill-btn" data-tab="LISTED" onclick="Pages.filterIPOTab('LISTED')">Recently Listed 📈</button>
+              <button class="pill-btn" data-tab="CLOSED" onclick="Pages.filterIPOTab('CLOSED')">Closed / Allotment 🔒</button>
               <button class="pill-btn" data-tab="SME" onclick="Pages.filterIPOTab('SME')">SME IPOs</button>
               <button class="pill-btn" data-tab="MAINBOARD" onclick="Pages.filterIPOTab('MAINBOARD')">Mainboard</button>
             </div>
@@ -1593,9 +1594,42 @@ const Pages = {
           <span>Estimated Total Payable:</span>
           <span>${formatINR(d.total_estimated_payable)}</span>
         </div>
+        <button class="btn btn-primary btn-sm btn-block mt-3" onclick="Pages.saveGoldToPortfolio(${d.weight_grams}, ${purity_karat}, ${d.gold_rate_per_gram}, ${d.total_estimated_payable})">
+          💼 Save This Gold Investment to Portfolio
+        </button>
       `;
     } catch (err) {
       resultBox.innerHTML = `<span class="text-danger">${err.message}</span>`;
+    }
+  },
+
+  async saveGoldToPortfolio(weight, purity, rate, total) {
+    try {
+      const name = `${purity}K Gold Bullion / Jewellery (${weight}g)`;
+      const symbol = `GOLD-${purity}K`;
+      const res = await Api.post('/investments', {
+        category: 'GOLD',
+        category_code: 'GOLD',
+        symbol,
+        name,
+        instrument_name: name,
+        quantity: weight,
+        unit_price: rate,
+        total_amount: total,
+        purity_karat: purity,
+        gold_form: purity >= 24 ? 'PHYSICAL_COIN' : 'JEWELLERY',
+        purchase_date: new Date().toISOString().split('T')[0],
+        portfolio_tag: 'DEFAULT',
+        notes: `Recorded via Gold Calculator (${purity}K @ ₹${rate}/g)`
+      });
+      if (res.success || res.status === 'ok') {
+        showToast(`Gold holding saved to portfolio: ${name}`, 'success');
+        App.navigate('portfolio');
+      } else {
+        throw new Error(res.error || 'Failed to add gold holding');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
     }
   },
 
@@ -2599,76 +2633,366 @@ const Pages = {
     }
   },
 
-  // ─── SWP CALCULATOR ────────────────────────────────────────────────────────
+  // ─── FINANCIAL CALCULATORS HUB (SWP, FD, BOND, GOLD) ─────────────────────────
   renderSWP(container) {
     container.innerHTML = `
       <div class="page-header">
-        <h2>Systematic Withdrawal Plan (SWP) Calculator</h2>
-      </div>
-
-      <div class="calc-layout">
-        <!-- Input Form -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Withdrawal Parameters</div>
-          </div>
-          <div class="card-body">
-            <div class="form-group">
-              <label>Initial Investment Corpus (₹) *</label>
-              <input type="number" id="swp-corpus" value="1000000" min="10000" step="50000"/>
-            </div>
-            <div class="form-group">
-              <label>Monthly Withdrawal Amount (₹) *</label>
-              <input type="number" id="swp-withdrawal" value="8000" min="500" step="500"/>
-            </div>
-            <div class="form-group">
-              <label>Expected Annual Return Rate (%) *</label>
-              <input type="number" id="swp-rate" value="9" min="1" max="30" step="0.5"/>
-            </div>
-            <div class="form-group">
-              <label>Withdrawal Period (Years) *</label>
-              <input type="number" id="swp-years" value="10" min="1" max="40" step="1"/>
-            </div>
-            <button class="btn btn-primary btn-block mt-2" onclick="Pages.calculateSWP()">Calculate Cashflow</button>
-          </div>
-        </div>
-
-        <!-- Output Results -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Cashflow Summary</div>
-          </div>
-          <div class="card-body" id="swp-results-box">
-            <p class="text-muted">Click "Calculate Cashflow" to analyze corpus sustainability.</p>
-          </div>
+        <div>
+          <h2>Financial Calculators & Wealth Projection</h2>
+          <p class="text-muted" style="font-size:0.88rem; margin-top:2px;">
+            Calculate returns, compounding cashflows, and maturity schedules. Save any calculated investment directly to your portfolio.
+          </p>
         </div>
       </div>
 
-      <!-- Schedule Table -->
-      <div class="card mt-3 hidden" id="swp-schedule-card">
-        <div class="card-header">
-          <div class="card-title">Annual Corpus & Withdrawal Schedule</div>
+      <!-- Calculator Navigation Tabs -->
+      <div class="pill-bar mb-3" id="calc-hub-pills">
+        <button class="pill-btn active" data-calctab="swp" onclick="Pages.switchCalcHubTab('swp')">💸 SWP Calculator</button>
+        <button class="pill-btn" data-calctab="fd" onclick="Pages.switchCalcHubTab('fd')">🏛️ Fixed Deposit (FD)</button>
+        <button class="pill-btn" data-calctab="bond" onclick="Pages.switchCalcHubTab('bond')">📜 Bond & Debenture</button>
+        <button class="pill-btn" data-calctab="gold" onclick="Pages.switchCalcHubTab('gold')">🥇 Gold Calculator</button>
+      </div>
+
+      <div id="calc-hub-containers">
+        <!-- 1. SWP SECTION -->
+        <div id="calc-section-swp">
+          <div class="calc-layout">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Withdrawal Parameters</div>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label>Initial Investment Corpus (₹) *</label>
+                  <input type="number" id="swp-corpus" value="1000000" min="10000" step="50000"/>
+                </div>
+                <div class="form-group">
+                  <label>Monthly Withdrawal Amount (₹) *</label>
+                  <input type="number" id="swp-withdrawal" value="8000" min="500" step="500"/>
+                </div>
+                <div class="form-group">
+                  <label>Expected Annual Return Rate (%) *</label>
+                  <input type="number" id="swp-rate" value="9" min="1" max="30" step="0.5"/>
+                </div>
+                <div class="form-group">
+                  <label>Withdrawal Period (Years) *</label>
+                  <input type="number" id="swp-years" value="10" min="1" max="40" step="1"/>
+                </div>
+                <button class="btn btn-primary btn-block mt-2" onclick="Pages.calculateSWP()">Calculate Cashflow</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Cashflow Summary</div>
+              </div>
+              <div class="card-body" id="swp-results-box">
+                <p class="text-muted">Click "Calculate Cashflow" to analyze corpus sustainability.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-3 hidden" id="swp-schedule-card">
+            <div class="card-header">
+              <div class="card-title">Annual Corpus & Withdrawal Schedule</div>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table id="swp-schedule-table">
+                  <thead>
+                    <tr>
+                      <th>Year</th>
+                      <th>Opening Balance (₹)</th>
+                      <th>Withdrawn This Year (₹)</th>
+                      <th>Interest Earned (₹)</th>
+                      <th>Closing Balance (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="card-body">
-          <div class="table-responsive">
-            <table id="swp-schedule-table">
-              <thead>
-                <tr>
-                  <th>Year</th>
-                  <th>Opening Balance (₹)</th>
-                  <th>Withdrawn This Year (₹)</th>
-                  <th>Interest Earned (₹)</th>
-                  <th>Closing Balance (₹)</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+
+        <!-- 2. FD SECTION -->
+        <div id="calc-section-fd" class="hidden">
+          <div class="calc-layout">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Fixed Deposit (FD) Parameters</div>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label>Bank / Financial Institution *</label>
+                  <input type="text" id="calc-fd-bank" value="HDFC Bank" placeholder="e.g. SBI, HDFC, ICICI"/>
+                </div>
+                <div class="form-group">
+                  <label>Principal Deposit Amount (₹) *</label>
+                  <input type="number" id="calc-fd-principal" value="100000" min="1000" step="10000"/>
+                </div>
+                <div class="form-group">
+                  <label>Annual Interest Rate (% p.a.) *</label>
+                  <input type="number" id="calc-fd-rate" value="7.25" min="0.5" max="25" step="0.05"/>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                  <div class="form-group">
+                    <label>Tenure (Years) *</label>
+                    <input type="number" id="calc-fd-years" value="3" min="0" max="30" step="1"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Additional Months</label>
+                    <input type="number" id="calc-fd-months" value="0" min="0" max="11" step="1"/>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Compounding Frequency *</label>
+                  <select id="calc-fd-compounding" class="form-control">
+                    <option value="QUARTERLY" selected>Quarterly (Indian Standard)</option>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="HALF_YEARLY">Half-Yearly</option>
+                    <option value="ANNUALLY">Annually</option>
+                    <option value="SIMPLE">Simple Interest (No Compounding)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Payout Type *</label>
+                  <select id="calc-fd-payout" class="form-control">
+                    <option value="CUMULATIVE" selected>Cumulative (Reinvest Interest to Maturity)</option>
+                    <option value="REGULAR">Regular Periodic Interest Payout</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary btn-block mt-2" onclick="Pages.calculateFD()">Calculate FD Maturity</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">FD Maturity & Yield Summary</div>
+              </div>
+              <div class="card-body" id="fd-results-box">
+                <p class="text-muted">Click "Calculate FD Maturity" to view guaranteed returns and yield.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-3 hidden" id="fd-schedule-card">
+            <div class="card-header">
+              <div class="card-title">Year-by-Year Growth Schedule</div>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table id="fd-schedule-table">
+                  <thead>
+                    <tr>
+                      <th>Year</th>
+                      <th>Opening Balance (₹)</th>
+                      <th>Interest Earned (₹)</th>
+                      <th>Closing Balance (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. BOND SECTION -->
+        <div id="calc-section-bond" class="hidden">
+          <div class="calc-layout">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Bond & Debenture Parameters</div>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label>Bond Name / Identifier *</label>
+                  <input type="text" id="calc-bond-name" value="7.18% GS 2033" placeholder="e.g. Sovereign Gold Bond, GOI 2033, REC Infra"/>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                  <div class="form-group">
+                    <label>Face Value (₹) *</label>
+                    <input type="number" id="calc-bond-face" value="1000" min="10" step="100"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Purchase Price (₹) *</label>
+                    <input type="number" id="calc-bond-price" value="985" min="10" step="10"/>
+                  </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                  <div class="form-group">
+                    <label>Units / Quantity *</label>
+                    <input type="number" id="calc-bond-qty" value="100" min="1" step="10"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Coupon Rate (% p.a.) *</label>
+                    <input type="number" id="calc-bond-coupon" value="7.18" min="0" max="30" step="0.01"/>
+                  </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                  <div class="form-group">
+                    <label>Payment Frequency *</label>
+                    <select id="calc-bond-freq" class="form-control">
+                      <option value="SEMI_ANNUALLY" selected>Semi-Annually (Standard)</option>
+                      <option value="ANNUALLY">Annually</option>
+                      <option value="QUARTERLY">Quarterly</option>
+                      <option value="MONTHLY">Monthly</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Tenure to Maturity (Years) *</label>
+                    <input type="number" id="calc-bond-tenure" value="7" min="1" max="50" step="1"/>
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-block mt-2" onclick="Pages.calculateBond()">Calculate Bond Yield & Cashflow</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Bond Valuation & Yield Breakdown</div>
+              </div>
+              <div class="card-body" id="bond-results-box">
+                <p class="text-muted">Click "Calculate Bond Yield" to analyze current yield, YTM, and total redemption.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-3 hidden" id="bond-schedule-card">
+            <div class="card-header">
+              <div class="card-title">Annual Coupon Cashflow Schedule</div>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table id="bond-schedule-table">
+                  <thead>
+                    <tr>
+                      <th>Year</th>
+                      <th>Periodic Coupon (₹)</th>
+                      <th>Total Annual Coupon (₹)</th>
+                      <th>Cumulative Coupon (₹)</th>
+                      <th>Principal Returned (₹)</th>
+                      <th>Total Cashflow (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. GOLD SECTION -->
+        <div id="calc-section-gold" class="hidden">
+          <div class="calc-layout">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Gold Investment Parameters</div>
+              </div>
+              <div class="card-body">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                  <div class="form-group">
+                    <label>Weight (Grams) *</label>
+                    <input type="number" id="calc-gold-weight" value="10" min="0.1" step="1"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Purity *</label>
+                    <select id="calc-gold-purity" class="form-control" onchange="Pages.onGoldPurityChange()">
+                      <option value="24" selected>24 Karat (99.9% Pure)</option>
+                      <option value="22">22 Karat (91.6% Jewellery)</option>
+                      <option value="18">18 Karat (75.0% Jewellery)</option>
+                      <option value="14">14 Karat (58.5% Jewellery)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Rate per Gram (₹) *</label>
+                  <div style="display:flex; gap:0.5rem;">
+                    <input type="number" id="calc-gold-rate" value="7950" min="1000" step="50" style="flex:1;"/>
+                    <button class="btn btn-outline btn-sm" onclick="Pages.fetchLiveGoldRateForCalc()">⚡ Live Rate</button>
+                  </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                  <div class="form-group">
+                    <label>Making Charges (%)</label>
+                    <input type="number" id="calc-gold-making" value="5" min="0" max="30" step="0.5"/>
+                  </div>
+                  <div class="form-group">
+                    <label>GST on Gold</label>
+                    <input type="text" value="3.00% (Govt Standard)" disabled style="background:#f1f5f9; color:#475569;"/>
+                  </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                  <div class="form-group">
+                    <label>Expected Appreciation (% p.a.)</label>
+                    <input type="number" id="calc-gold-apprec" value="10.5" min="1" max="40" step="0.5"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Holding Horizon (Years)</label>
+                    <input type="number" id="calc-gold-horizon" value="5" min="1" max="30" step="1"/>
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-block mt-2" onclick="Pages.calculateGold()">Calculate Gold Outlay & Growth</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Gold Acquisition & Wealth Summary</div>
+              </div>
+              <div class="card-body" id="gold-results-box">
+                <p class="text-muted">Click "Calculate Gold Outlay" to view GST, making breakdown, and projected future value.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-3 hidden" id="gold-schedule-card">
+            <div class="card-header">
+              <div class="card-title">Projected Wealth Appreciation Timeline</div>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table id="gold-schedule-table">
+                  <thead>
+                    <tr>
+                      <th>Year</th>
+                      <th>Projected Metal Rate (₹/g)</th>
+                      <th>Metal Value (₹)</th>
+                      <th>Net Appreciation (₹)</th>
+                      <th>Absolute Growth (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     `;
 
     this.calculateSWP();
+  },
+
+  switchCalcHubTab(tab) {
+    document.querySelectorAll('#calc-hub-pills .pill-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`#calc-hub-pills .pill-btn[data-calctab="${tab}"]`)?.classList.add('active');
+
+    const sections = ['swp', 'fd', 'bond', 'gold'];
+    sections.forEach(s => {
+      const el = document.getElementById(`calc-section-${s}`);
+      if (el) el.classList.toggle('hidden', s !== tab);
+    });
+
+    if (tab === 'fd') {
+      this.calculateFD();
+    } else if (tab === 'bond') {
+      this.calculateBond();
+    } else if (tab === 'gold') {
+      this.fetchLiveGoldRateForCalc();
+      this.calculateGold();
+    }
   },
 
   async calculateSWP() {
@@ -2743,6 +3067,355 @@ const Pages = {
       if (resBox) resBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
     }
   },
+
+  async calculateFD() {
+    const institution = document.getElementById('calc-fd-bank')?.value.trim() || 'Bank FD';
+    const principal = parseFloat(document.getElementById('calc-fd-principal')?.value || 0);
+    const annual_interest_rate = parseFloat(document.getElementById('calc-fd-rate')?.value || 0);
+    const tenure_years = parseInt(document.getElementById('calc-fd-years')?.value || 0, 10);
+    const tenure_months = parseInt(document.getElementById('calc-fd-months')?.value || 0, 10);
+    const compounding_frequency = document.getElementById('calc-fd-compounding')?.value || 'QUARTERLY';
+    const payout_type = document.getElementById('calc-fd-payout')?.value || 'CUMULATIVE';
+
+    const resBox = document.getElementById('fd-results-box');
+    const schedCard = document.getElementById('fd-schedule-card');
+    const schedTable = document.querySelector('#fd-schedule-table tbody');
+
+    if (principal <= 0 || annual_interest_rate <= 0 || (tenure_years === 0 && tenure_months === 0)) {
+      if (resBox) resBox.innerHTML = '<div class="alert alert-error">Please enter valid principal, interest rate, and tenure.</div>';
+      return;
+    }
+
+    try {
+      const res = await Api.post('/calculators/fd', {
+        principal,
+        annual_interest_rate,
+        tenure_years,
+        tenure_months,
+        compounding_frequency,
+        payout_type
+      });
+
+      const d = res.data || {};
+      window._last_fd_calc = { ...d, institution, principal, annual_interest_rate, compounding_frequency, payout_type };
+
+      if (resBox) {
+        resBox.innerHTML = `
+          <div class="calc-result-box">
+            <div class="calc-result-label">Guaranteed Maturity Value</div>
+            <div class="calc-result-value">${formatINR(d.maturity_value)}</div>
+          </div>
+          <div class="summary-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 0.75rem;">
+            <div class="summary-card">
+              <div class="summary-label">Principal Amount</div>
+              <div class="summary-value" style="font-size:1.15rem;">${formatINR(d.principal)}</div>
+            </div>
+            <div class="summary-card card-success">
+              <div class="summary-label">Total Interest Earned</div>
+              <div class="summary-value text-success font-bold" style="font-size:1.15rem;">+${formatINR(d.total_interest_earned)}</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Effective Annual Yield</div>
+              <div class="summary-value" style="font-size:1.15rem;">${formatNumber(d.effective_annual_yield)}%</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">${payout_type === 'REGULAR' ? 'Periodic Payout' : 'Tenure'}</div>
+              <div class="summary-value" style="font-size:1.15rem;">${payout_type === 'REGULAR' ? formatINR(d.periodic_payout) : d.total_tenure_years + ' Years'}</div>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-block" onclick="Pages.saveFDToPortfolio()">
+            💾 Save Fixed Deposit to Portfolio
+          </button>
+        `;
+      }
+
+      if (d.schedule && d.schedule.length > 0 && schedCard && schedTable) {
+        schedTable.innerHTML = d.schedule.map(s => `
+          <tr>
+            <td><strong>Year ${s.year}</strong></td>
+            <td>${formatINR(s.opening_balance)}</td>
+            <td class="text-success font-bold">+${formatINR(s.interest_earned)}</td>
+            <td class="font-bold">${formatINR(s.closing_balance)}</td>
+          </tr>
+        `).join('');
+        schedCard.classList.remove('hidden');
+      }
+    } catch (err) {
+      if (resBox) resBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  },
+
+  async saveFDToPortfolio() {
+    const d = window._last_fd_calc;
+    if (!d) return showToast('Please calculate FD maturity first', 'error');
+
+    const totalDays = Math.round(d.total_tenure_years * 365.25);
+    const matDate = new Date(Date.now() + totalDays * 86400000).toISOString().split('T')[0];
+    const sym = `${d.institution.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)}-FD-${d.annual_interest_rate}%`;
+
+    try {
+      const res = await Api.post('/investments', {
+        category: 'FIXED_DEPOSIT',
+        category_code: 'FIXED_DEPOSIT',
+        symbol: sym,
+        name: `${d.institution} Fixed Deposit (${d.annual_interest_rate}%)`,
+        instrument_name: `${d.institution} Fixed Deposit`,
+        institution: d.institution,
+        institution_name: d.institution,
+        principal: d.principal,
+        principal_amount: d.principal,
+        annual_interest_rate: d.annual_interest_rate,
+        interest_rate: d.annual_interest_rate,
+        maturity_date: matDate,
+        estimated_maturity_amount: d.maturity_value,
+        compounding_frequency: d.compounding_frequency,
+        payout_type: d.payout_type,
+        purchase_date: new Date().toISOString().split('T')[0],
+        portfolio_tag: 'DEFAULT',
+        notes: `Recorded via FD Calculator (${d.compounding_frequency} compounding, tenure: ${d.total_tenure_years} yrs)`
+      });
+
+      if (res.success || res.status === 'ok') {
+        showToast(`Fixed Deposit saved to portfolio: ${d.institution} FD`, 'success');
+        App.navigate('portfolio');
+      } else {
+        throw new Error(res.error || 'Failed to save Fixed Deposit');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
+
+  async calculateBond() {
+    const name = document.getElementById('calc-bond-name')?.value.trim() || 'Government / Corporate Bond';
+    const face_value = parseFloat(document.getElementById('calc-bond-face')?.value || 1000);
+    const purchase_price = parseFloat(document.getElementById('calc-bond-price')?.value || 1000);
+    const quantity = parseFloat(document.getElementById('calc-bond-qty')?.value || 1);
+    const coupon_rate = parseFloat(document.getElementById('calc-bond-coupon')?.value || 0);
+    const payment_frequency = document.getElementById('calc-bond-freq')?.value || 'SEMI_ANNUALLY';
+    const tenure_years = parseInt(document.getElementById('calc-bond-tenure')?.value || 5, 10);
+
+    const resBox = document.getElementById('bond-results-box');
+    const schedCard = document.getElementById('bond-schedule-card');
+    const schedTable = document.querySelector('#bond-schedule-table tbody');
+
+    if (face_value <= 0 || purchase_price <= 0 || quantity <= 0 || tenure_years <= 0) {
+      if (resBox) resBox.innerHTML = '<div class="alert alert-error">Please enter valid face value, price, quantity, and tenure.</div>';
+      return;
+    }
+
+    try {
+      const res = await Api.post('/calculators/bond', {
+        face_value,
+        purchase_price,
+        quantity,
+        coupon_rate,
+        payment_frequency,
+        tenure_years
+      });
+
+      const d = res.data || {};
+      window._last_bond_calc = { ...d, name, face_value, purchase_price, quantity, coupon_rate, payment_frequency, tenure_years };
+
+      if (resBox) {
+        resBox.innerHTML = `
+          <div class="calc-result-box">
+            <div class="calc-result-label">Total Outlay (Investment Cost)</div>
+            <div class="calc-result-value">${formatINR(d.total_outlay)}</div>
+          </div>
+          <div class="summary-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 0.75rem;">
+            <div class="summary-card card-primary">
+              <div class="summary-label">Maturity Redemption Value</div>
+              <div class="summary-value" style="font-size:1.15rem;">${formatINR(d.total_redemption_value)}</div>
+            </div>
+            <div class="summary-card card-success">
+              <div class="summary-label">Total Coupon Interest</div>
+              <div class="summary-value text-success font-bold" style="font-size:1.15rem;">+${formatINR(d.total_coupon_interest)}</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Current Yield</div>
+              <div class="summary-value" style="font-size:1.15rem;">${formatNumber(d.current_yield)}%</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Yield to Maturity (YTM)</div>
+              <div class="summary-value font-bold" style="font-size:1.15rem; color:var(--primary);">${formatNumber(d.approximate_ytm)}%</div>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-block" onclick="Pages.saveBondToPortfolio()">
+            💾 Save Bond Holding to Portfolio
+          </button>
+        `;
+      }
+
+      if (d.cashflow_schedule && d.cashflow_schedule.length > 0 && schedCard && schedTable) {
+        schedTable.innerHTML = d.cashflow_schedule.map(s => `
+          <tr>
+            <td><strong>Year ${s.year}</strong></td>
+            <td>${formatINR(s.periodic_coupon)}</td>
+            <td>${formatINR(s.annual_coupon)}</td>
+            <td>${formatINR(s.cumulative_coupon)}</td>
+            <td>${s.principal_redemption > 0 ? formatINR(s.principal_redemption) : '—'}</td>
+            <td class="font-bold text-success">${formatINR(s.total_cashflow)}</td>
+          </tr>
+        `).join('');
+        schedCard.classList.remove('hidden');
+      }
+    } catch (err) {
+      if (resBox) resBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  },
+
+  async saveBondToPortfolio() {
+    const d = window._last_bond_calc;
+    if (!d) return showToast('Please calculate Bond yield first', 'error');
+
+    const totalDays = Math.round(d.tenure_years * 365.25);
+    const matDate = new Date(Date.now() + totalDays * 86400000).toISOString().split('T')[0];
+    const sym = `${d.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}-${d.coupon_rate}%`;
+
+    try {
+      const res = await Api.post('/investments', {
+        category: 'BOND',
+        category_code: 'BOND',
+        symbol: sym,
+        name: d.name,
+        instrument_name: d.name,
+        quantity: d.quantity,
+        unit_price: d.purchase_price,
+        face_value: d.face_value,
+        total_amount: d.total_outlay,
+        coupon_rate: d.coupon_rate,
+        coupon_frequency: d.payment_frequency,
+        maturity_date: matDate,
+        purchase_date: new Date().toISOString().split('T')[0],
+        portfolio_tag: 'DEFAULT',
+        notes: `Recorded via Bond Calculator (YTM: ${d.approximate_ytm}%, Tenure: ${d.tenure_years} yrs)`
+      });
+
+      if (res.success || res.status === 'ok') {
+        showToast(`Bond saved to portfolio: ${d.name}`, 'success');
+        App.navigate('portfolio');
+      } else {
+        throw new Error(res.error || 'Failed to save Bond');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
+
+  onGoldPurityChange() {
+    const purity = parseInt(document.getElementById('calc-gold-purity')?.value || 24, 10);
+    const rateInput = document.getElementById('calc-gold-rate');
+    const base24 = window._live_gold_24k_rate || 7950;
+    if (rateInput) {
+      rateInput.value = Math.round(base24 * (purity / 24));
+    }
+    this.calculateGold();
+  },
+
+  async fetchLiveGoldRateForCalc() {
+    try {
+      const res = await Api.get('/metals/rates');
+      const oropocket = res.data?.oropocket?.gold;
+      if (oropocket && oropocket.sell_inr_per_gram > 0) {
+        window._live_gold_24k_rate = oropocket.sell_inr_per_gram;
+        const purity = parseInt(document.getElementById('calc-gold-purity')?.value || 24, 10);
+        const rateInput = document.getElementById('calc-gold-rate');
+        if (rateInput) {
+          rateInput.value = Math.round(window._live_gold_24k_rate * (purity / 24));
+        }
+        showToast(`Live gold rate updated: ₹${formatNumber(window._live_gold_24k_rate)}/g (24K)`, 'info');
+        this.calculateGold();
+      }
+    } catch (e) {
+      console.warn('Failed to fetch live gold rate:', e);
+    }
+  },
+
+  async calculateGold() {
+    const weight_grams = parseFloat(document.getElementById('calc-gold-weight')?.value || 10);
+    const purity_karat = parseInt(document.getElementById('calc-gold-purity')?.value || 24, 10);
+    const rate_per_gram = parseFloat(document.getElementById('calc-gold-rate')?.value || 7950);
+    const making_charges_percent = parseFloat(document.getElementById('calc-gold-making')?.value || 0);
+    const expected_appreciation_percent = parseFloat(document.getElementById('calc-gold-apprec')?.value || 10.5);
+    const horizon_years = parseInt(document.getElementById('calc-gold-horizon')?.value || 5, 10);
+
+    const resBox = document.getElementById('gold-results-box');
+    const schedCard = document.getElementById('gold-schedule-card');
+    const schedTable = document.querySelector('#gold-schedule-table tbody');
+
+    if (weight_grams <= 0 || rate_per_gram <= 0 || horizon_years <= 0) {
+      if (resBox) resBox.innerHTML = '<div class="alert alert-error">Please enter valid weight, rate, and horizon.</div>';
+      return;
+    }
+
+    try {
+      const res = await Api.post('/calculators/gold', {
+        weight_grams,
+        purity_karat,
+        rate_per_gram,
+        making_charges_percent,
+        expected_appreciation_percent,
+        horizon_years
+      });
+
+      const d = res.data || {};
+      window._last_gold_calc = { ...d, weight_grams, purity_karat, rate_per_gram, making_charges_percent, expected_appreciation_percent, horizon_years };
+
+      if (resBox) {
+        resBox.innerHTML = `
+          <div class="calc-result-box">
+            <div class="calc-result-label">Total Acquisition Outlay (Incl. GST & Making)</div>
+            <div class="calc-result-value">${formatINR(d.total_outlay)}</div>
+          </div>
+          <div class="summary-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 0.75rem;">
+            <div class="summary-card">
+              <div class="summary-label">Pure Metal Cost</div>
+              <div class="summary-value" style="font-size:1.15rem;">${formatINR(d.pure_gold_cost)}</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Making + GST (3%)</div>
+              <div class="summary-value" style="font-size:1.15rem;">${formatINR(d.making_charges + d.gst_amount)}</div>
+            </div>
+            <div class="summary-card card-success">
+              <div class="summary-label">Projected Future Value (${horizon_years} Yrs)</div>
+              <div class="summary-value text-success font-bold" style="font-size:1.15rem;">${formatINR(d.projected_future_value)}</div>
+            </div>
+            <div class="summary-card card-primary">
+              <div class="summary-label">Net Projected Gain</div>
+              <div class="summary-value font-bold" style="font-size:1.15rem;">+${formatINR(d.projected_capital_gain)}</div>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-block" onclick="Pages.saveGoldCalcToPortfolio()">
+            💾 Save Gold Holding to Portfolio
+          </button>
+        `;
+      }
+
+      if (d.projection_schedule && d.projection_schedule.length > 0 && schedCard && schedTable) {
+        schedTable.innerHTML = d.projection_schedule.map(s => `
+          <tr>
+            <td><strong>Year ${s.year}</strong></td>
+            <td>₹${formatNumber(s.projected_rate_per_gram)}</td>
+            <td class="font-bold">${formatINR(s.projected_value)}</td>
+            <td class="text-success font-bold">+${formatINR(s.unrealized_gain)}</td>
+            <td>+${formatNumber(s.return_pct)}%</td>
+          </tr>
+        `).join('');
+        schedCard.classList.remove('hidden');
+      }
+    } catch (err) {
+      if (resBox) resBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  },
+
+  async saveGoldCalcToPortfolio() {
+    const d = window._last_gold_calc;
+    if (!d) return showToast('Please calculate Gold outlay first', 'error');
+
+    return this.saveGoldToPortfolio(d.weight_grams, d.purity_karat, d.rate_per_gram, d.total_outlay);
+  },
+
 
   // ─── MATURITY TRACKER ──────────────────────────────────────────────────────
   async renderMaturity(container) {

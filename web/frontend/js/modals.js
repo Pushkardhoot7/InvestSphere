@@ -130,8 +130,10 @@ const Modals = {
     catSelect.addEventListener('change', () => {
       const cat = catSelect.value;
       const isFD = cat === 'FIXED_DEPOSIT';
+      const isBond = cat === 'BOND';
       const isStock = cat === 'STOCK';
       const fdFields = document.getElementById('fd-fields');
+      const bondFields = document.getElementById('bond-fields');
       const qtyGroup = document.getElementById('inv-qty-group');
       const priceRow = document.getElementById('inv-price-row');
       const stockSearchGroup = document.getElementById('inv-stock-search-group');
@@ -142,10 +144,25 @@ const Modals = {
 
       if (isFD) {
         fdFields?.classList.remove('hidden');
+        bondFields?.classList.add('hidden');
         qtyGroup?.classList.add('hidden');
         priceRow?.classList.add('hidden');
+      } else if (isBond) {
+        fdFields?.classList.add('hidden');
+        bondFields?.classList.remove('hidden');
+        qtyGroup?.classList.remove('hidden');
+        priceRow?.classList.remove('hidden');
+        const symEl = document.getElementById('inv-symbol');
+        const nameEl = document.getElementById('inv-name');
+        if (symEl && !symEl.value) symEl.value = 'GOI-7.18-2033';
+        if (nameEl && !nameEl.value) nameEl.value = '7.18% Government of India Sovereign Bond 2033';
+        const faceEl = document.getElementById('inv-bond-face');
+        const couponEl = document.getElementById('inv-bond-coupon');
+        if (faceEl && !faceEl.value) faceEl.value = '1000';
+        if (couponEl && !couponEl.value) couponEl.value = '7.18';
       } else {
         fdFields?.classList.add('hidden');
+        bondFields?.classList.add('hidden');
         qtyGroup?.classList.remove('hidden');
         priceRow?.classList.remove('hidden');
       }
@@ -377,9 +394,16 @@ const Modals = {
       payload.quantity = quantity;
       payload.unit_price = unit_price;
       payload.total_amount = total_amount;
-      // For Bonds, also send face_value so the backend validator passes
+      // For Bonds, capture face value, coupon rate, and maturity
       if (category === 'BOND') {
-        payload.face_value = unit_price;
+        const bondFace = parseFloat(document.getElementById('inv-bond-face')?.value || 0) || unit_price;
+        const bondCoupon = parseFloat(document.getElementById('inv-bond-coupon')?.value || 0);
+        const bondFreq = document.getElementById('inv-bond-freq')?.value || 'SEMI_ANNUALLY';
+        const bondMaturity = document.getElementById('inv-bond-maturity')?.value || '';
+        payload.face_value = bondFace;
+        payload.coupon_rate = bondCoupon;
+        payload.coupon_frequency = bondFreq;
+        if (bondMaturity) payload.maturity_date = bondMaturity;
       }
     }
 

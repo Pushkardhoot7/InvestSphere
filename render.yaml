@@ -18,6 +18,8 @@ services:
         value: /opt/render/project/data/investsphere_web.db
       - key: ALLOWED_ORIGINS
         value: "*"
+      - key: IPOALERTS_API_KEY
+        sync: false
     disk:
       name: investsphere-data
       mountPath: /opt/render/project/data

@@ -64,16 +64,16 @@ SELECT
     inst.instrument_name,
     it.type_code AS asset_type,
     inv.portfolio_tag,
-    -- Net remaining quantity: sum of BUYs minus sum of SELLs/REDEMPTIONs
+    -- Net remaining quantity: sum of BUYs/DEPOSITs minus sum of SELLs/REDEMPTIONs/WITHDRAWALs
     ROUND(COALESCE(SUM(CASE 
-        WHEN t.transaction_type = 'BUY' THEN t.quantity 
-        WHEN t.transaction_type IN ('SELL', 'REDEMPTION') THEN -t.quantity 
+        WHEN t.transaction_type IN ('BUY', 'DEPOSIT') THEN t.quantity 
+        WHEN t.transaction_type IN ('SELL', 'REDEMPTION', 'WITHDRAWAL') THEN -t.quantity 
         ELSE 0 
     END), 0), 4) AS remaining_quantity,
     -- Total invested acquisition cost for active holdings (minor units)
     COALESCE(SUM(CASE 
-        WHEN t.transaction_type = 'BUY' THEN t.net_amount 
-        WHEN t.transaction_type IN ('SELL', 'REDEMPTION') THEN -t.net_amount 
+        WHEN t.transaction_type IN ('BUY', 'DEPOSIT') THEN t.net_amount 
+        WHEN t.transaction_type IN ('SELL', 'REDEMPTION', 'WITHDRAWAL') THEN -t.net_amount 
         ELSE 0 
     END), 0) AS net_invested_amount,
     -- Cumulative transaction fees
@@ -130,8 +130,8 @@ SELECT
     it.type_name AS asset_type_name,
     COUNT(DISTINCT inv.investment_id) AS active_holdings_count,
     COALESCE(SUM(CASE 
-        WHEN t.transaction_type = 'BUY' THEN t.net_amount 
-        WHEN t.transaction_type IN ('SELL', 'REDEMPTION') THEN -t.net_amount 
+        WHEN t.transaction_type IN ('BUY', 'DEPOSIT') THEN t.net_amount 
+        WHEN t.transaction_type IN ('SELL', 'REDEMPTION', 'WITHDRAWAL') THEN -t.net_amount 
         ELSE 0 
     END), 0) AS category_invested_amount
 FROM users u

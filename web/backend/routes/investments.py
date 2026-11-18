@@ -250,10 +250,12 @@ def add_investment():
             int_rate = float(data.get("annual_interest_rate") or data.get("interest_rate") or 0.0)
             comp_freq = data.get("compounding_frequency", "QUARTERLY")
             payout = data.get("payout_type", "CUMULATIVE")
-            mat_date = data.get("maturity_date", "")
+            mat_date = data.get("maturity_date") or (datetime.date.today() + datetime.timedelta(days=365)).isoformat()
 
             # Estimate maturity amount if not given
-            if "estimated_maturity_amount_cents" in data:
+            if "estimated_maturity_amount" in data and float(data["estimated_maturity_amount"]) > 0:
+                maturity_amt = int(round(float(data["estimated_maturity_amount"]) * 100))
+            elif "estimated_maturity_amount_cents" in data and int(data["estimated_maturity_amount_cents"]) > 0:
                 maturity_amt = int(data["estimated_maturity_amount_cents"])
             else:
                 # 1-year default tenure estimate for compound interest
@@ -281,7 +283,7 @@ def add_investment():
             face_val_raw = float(data.get("face_value") or data.get("unit_price") or data.get("price") or 1000)
             face_val = int(round(face_val_raw * 100)) if face_val_raw > 0 else int(data.get("face_value_cents", 100000))
             qty = float(data.get("quantity") or data.get("qty") or 1)
-            mat_date = data.get("maturity_date", "") or "2035-12-31"
+            mat_date = data.get("maturity_date") or (datetime.date.today() + datetime.timedelta(days=365*5)).isoformat()
             db.execute(
                 """INSERT OR REPLACE INTO bonds
                    (investment_id, issuer_name, bond_type, face_value, coupon_rate,
@@ -298,7 +300,7 @@ def add_investment():
                             f"{inst_name} Bond Redemption/Maturity")
 
         # 4. Record initial purchase transaction
-        purchase_date = data.get("purchase_date", now)
+        purchase_date = (data.get("purchase_date") or data.get("date") or now[:10]).strip()
         if cat == "FIXED_DEPOSIT":
             principal = int(round(float(data.get("principal") or data.get("principal_amount")) * 100)) if ("principal" in data or "principal_amount" in data) else int(data.get("principal_amount_cents", 0))
             inst_label = (data.get("institution_name") or data.get("institution") or inst_name)
@@ -375,19 +377,13 @@ def delete_investment(inv_id):
         return error("Investment not found or access denied.", 404)
 
     db = get_db()
-    cascade = request.args.get("cascade", "false").lower() == "true"
-
-    if not cascade:
-        tx_count = db.execute(
-            "SELECT COUNT(*) FROM transactions WHERE investment_id = ?", (inv_id,)
-        ).fetchone()[0]
-        if tx_count > 0:
-            return error(
-                f"Cannot delete: {tx_count} transaction(s) exist. Use cascade=true to delete all.", 409
-            )
-
     try:
-        # With foreign_keys=ON and ON DELETE CASCADE, deleting investment cascades
+        # Cleanly delete dependent records first to avoid FOREIGN KEY RESTRICT constraint violation
+        db.execute("DELETE FROM transactions WHERE investment_id = ?", (inv_id,))
+        db.execute("DELETE FROM gold_holdings WHERE investment_id = ?", (inv_id,))
+        db.execute("DELETE FROM fixed_deposits WHERE investment_id = ?", (inv_id,))
+        db.execute("DELETE FROM bonds WHERE investment_id = ?", (inv_id,))
+        db.execute("DELETE FROM financial_events WHERE investment_id = ?", (inv_id,))
         db.execute("DELETE FROM investments WHERE investment_id = ? AND user_id = ?", (inv_id, g.user_id))
         db.commit()
         return success(message="Investment deleted successfully.")
@@ -409,17 +405,7 @@ def db_check_ownership(inv_id):
 
 
 def _compute_cost_basis_simple(txs):
-    qty = 0.0
-    cost = 0
-    for tx in txs:
-        if tx["transaction_type"] in ("BUY", "DEPOSIT"):
-            qty += tx["quantity"] or 0
-            cost += tx["net_amount"] or 0
-        elif tx["transaction_type"] in ("SELL", "REDEMPTION"):
-            qty -= tx["quantity"] or 0
-            if qty < 0:
-                qty = 0
-    return round(qty, 6), cost
+    return _compute_cost_basis_full(txs)
 
 
 def _compute_cost_basis_full(txs):
@@ -611,8 +597,6 @@ def _validate_investment(data) -> str | None:
         return "Investment name cannot be blank."
     if not (data.get("symbol") or "").strip():
         return "Symbol/Scheme identifier cannot be blank."
-    if not (data.get("purchase_date") or data.get("date") or "").strip():
-        return "Purchase date cannot be blank."
 
     if cat in ("STOCK", "MUTUAL_FUND", "GOLD"):
         qty = float(data.get("quantity") or data.get("qty") or 0)
@@ -624,8 +608,6 @@ def _validate_investment(data) -> str | None:
             return "Fixed Deposit principal amount must be positive."
         if not (data.get("institution_name") or data.get("institution")):
             return "Institution name is required for Fixed Deposits."
-        if not data.get("maturity_date"):
-            return "Maturity date is required for Fixed Deposits."
     if cat == "BOND":
         face_val = float(data.get("face_value") or data.get("unit_price") or data.get("price") or data.get("face_value_cents") or 0)
         if face_val <= 0:

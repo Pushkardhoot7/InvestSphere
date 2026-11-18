@@ -369,6 +369,34 @@
           </div>
         </div>
       </div>
+      <!-- Bond-specific fields -->
+      <div id="bond-fields" class="hidden">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Face Value (₹)</label>
+            <input type="number" id="inv-bond-face" placeholder="e.g. 1000" min="1" step="0.01"/>
+          </div>
+          <div class="form-group">
+            <label>Coupon Rate (%)</label>
+            <input type="number" id="inv-bond-coupon" placeholder="e.g. 8.5" min="0" max="50" step="0.01"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Coupon Frequency</label>
+            <select id="inv-bond-freq">
+              <option value="SEMI_ANNUALLY">Semi-Annually</option>
+              <option value="ANNUALLY">Annually</option>
+              <option value="QUARTERLY">Quarterly</option>
+              <option value="MONTHLY">Monthly</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Bond Maturity Date</label>
+            <input type="date" id="inv-bond-maturity"/>
+          </div>
+        </div>
+      </div>
       <div class="form-group">
         <label>Portfolio Tag</label>
         <input type="text" id="inv-tag" placeholder="e.g. Retirement, Growth" value="DEFAULT"/>

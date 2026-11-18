@@ -28,15 +28,9 @@ def create_app():
     app = Flask(__name__)
 
     # ── Security: SECRET_KEY must be a fixed value set via environment variable.
-    # If not set, generate a stable key based on a machine-level fallback
-    # (still not ideal for multi-worker, but prevents regeneration on redeploy).
-    _secret = os.environ.get("SECRET_KEY", "").strip()
-    if not _secret:
-        # Warn loudly if not configured — tokens will NOT survive worker restarts
-        print("[WARNING] SECRET_KEY is not set in environment variables. "
-              "JWT tokens will not survive server restarts. "
-              "Set SECRET_KEY in your Render dashboard environment variables.", flush=True)
-        _secret = secrets.token_hex(32)
+    # If not set, use a stable production secret key so tokens survive server restarts
+    # and stay synchronized across all Gunicorn workers.
+    _secret = os.environ.get("SECRET_KEY", "").strip() or "investsphere-secret-key-stable-2026-production-fix-permanent"
     app.config["SECRET_KEY"] = _secret
 
     # ── Database: Prefer persistent disk path set via DATABASE_URL env var.

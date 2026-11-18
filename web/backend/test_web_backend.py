@@ -651,6 +651,68 @@ comp = compare_schemes([SCHEMES_CATALOG[0]["id"], SCHEMES_CATALOG[1]["id"]])
 check("Comparison matrix returns 2 funds",  len(comp) == 2)
 
 
+print("\n[22] Fixed Deposit, Bond & Gold Financial Calculations")
+# 1. Fixed Deposit compounding math
+def calc_fd_test(p, r_pct, t_yrs, freq="QUARTERLY"):
+    freq_map = {"ANNUALLY": 1, "HALF_YEARLY": 2, "QUARTERLY": 4, "MONTHLY": 12, "SIMPLE": 0}
+    n = freq_map.get(freq, 4)
+    r = r_pct / 100.0
+    if n == 0:
+        interest = p * r * t_yrs
+        maturity = p + interest
+    else:
+        maturity = p * math.pow(1.0 + r / n, n * t_yrs)
+        interest = maturity - p
+    return round(maturity, 2), round(interest, 2)
+
+fd_mat, fd_int = calc_fd_test(100000, 7.5, 3, "QUARTERLY")
+check("FD quarterly maturity > principal", fd_mat > 100000)
+check("FD quarterly interest correct (~₹24.9k)", 24000 < fd_int < 26000)
+
+fd_s_mat, fd_s_int = calc_fd_test(100000, 7.5, 3, "SIMPLE")
+check("FD simple interest matches P*R*T (₹22,500)", fd_s_int == 22500.0)
+check("Compound FD earns more than simple FD", fd_mat > fd_s_mat)
+
+# 2. Bond yield & cashflow math
+def calc_bond_test(face, price, qty, coupon_pct, tenure_yrs, freq="SEMI_ANNUALLY"):
+    outlay = price * qty
+    redemption = face * qty
+    annual_coupon = face * (coupon_pct / 100.0) * qty
+    total_coupon = annual_coupon * tenure_yrs
+    gain = (redemption + total_coupon) - outlay
+    current_yield = ((face * (coupon_pct / 100.0)) / price) * 100.0
+    approx_ytm = ((face * (coupon_pct / 100.0)) + ((face - price) / tenure_yrs)) / ((face + price) / 2.0) * 100.0
+    return round(outlay, 2), round(redemption, 2), round(total_coupon, 2), round(gain, 2), round(current_yield, 2), round(approx_ytm, 2)
+
+b_out, b_red, b_c_tot, b_gain, b_cy, b_ytm = calc_bond_test(1000, 980, 10, 7.18, 5)
+check("Bond outlay matches purchase price (₹9,800)", b_out == 9800.0)
+check("Bond redemption equals face value (₹10,000)", b_red == 10000.0)
+check("Bond total coupon interest received (₹3,590)", b_c_tot == 3590.0)
+check("Bond total net profit (₹3,790)", b_gain == 3790.0)
+check("Bond discount increases YTM above coupon rate (YTM > 7.18%)", b_ytm > 7.18)
+
+# 3. Gold acquisition, tax & projection math
+def calc_gold_test(grams, purity_k, rate_per_g, making_pct=5.0, gst_pct=3.0, apprec_pct=10.0, horizon_yrs=5):
+    pure_rate = rate_per_g * (purity_k / 24.0)
+    metal_cost = grams * pure_rate
+    making = metal_cost * (making_pct / 100.0)
+    gst = (metal_cost + making) * (gst_pct / 100.0)
+    total_outlay = metal_cost + making + gst
+    future_rate = rate_per_g * math.pow(1.0 + apprec_pct / 100.0, horizon_yrs)
+    future_metal_cost = grams * (future_rate * (purity_k / 24.0))
+    proj_gain = future_metal_cost - total_outlay
+    return round(metal_cost, 2), round(gst, 2), round(total_outlay, 2), round(future_metal_cost, 2), round(proj_gain, 2)
+
+g_cost, g_gst, g_outlay, g_future, g_gain = calc_gold_test(10, 24, 8000, 5.0, 3.0, 10.0, 5)
+check("Gold metal cost 10g 24K @ ₹8000 = ₹80,000", g_cost == 80000.0)
+check("Gold GST 3% on (metal + making) = ₹2,520", g_gst == 2520.0)
+check("Gold total acquisition outlay = ₹86,520", g_outlay == 86520.0)
+check("Gold projected future value > outlay at 10% CAGR", g_future > g_outlay)
+check("Gold capital gain is positive", g_gain > 0)
+
+
+
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 conn.close()
 os.unlink(DB)

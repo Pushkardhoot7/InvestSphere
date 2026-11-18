@@ -868,13 +868,21 @@ def fetch_ipoalerts_ipos(force_refresh: bool = False) -> tuple[list, bool, str]:
         url = f"{IPOALERTS_BASE_URL}/ipos?status={status_param}&limit=20"
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=5.0) as resp:
+            with urllib.request.urlopen(req, timeout=6.0) as resp:
                 if resp.status == 200:
                     body = json.loads(resp.read().decode("utf-8"))
-                    items = body.get("ipos", [])
+                    if isinstance(body, list):
+                        items = body
+                    elif isinstance(body, dict):
+                        items = body.get("ipos") or body.get("data") or body.get("results") or []
+                    else:
+                        items = []
                     for it in items:
-                        norm = _normalize_ipoalerts_record(it)
-                        live_records.append(norm)
+                        if isinstance(it, dict):
+                            norm = _normalize_ipoalerts_record(it)
+                            live_records.append(norm)
+        except urllib.error.HTTPError as e:
+            _IPO_CACHE["error"] = f"HTTP {e.code}: {e.reason}"
         except Exception as e:
             _IPO_CACHE["error"] = str(e)
 
